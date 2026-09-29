@@ -231,60 +231,130 @@
     .reveal { opacity: 1; transform: none; }
   }
 </style>
-<!-- Přepnutí Music ↔ Games: stránka vyjede nahoru a hlavička se prolne do druhé -->
+<!-- Přepnutí Music ↔ Games: stránka vyjede nahoru, přejede barevný panel
+     a zazní zvuk — melodický pro hudbu, arkádový pro hry -->
 <script>
 try {
-  if (sessionStorage.getItem('kooksSwitch')) {
-    sessionStorage.removeItem('kooksSwitch');
-    document.documentElement.classList.add('switched');
-  }
+  var _w = JSON.parse(sessionStorage.getItem('kooksWipe') || 'null');
+  sessionStorage.removeItem('kooksWipe');
+  if (_w) { window._kooksWipe = _w; document.documentElement.classList.add('wipe-in'); }
 } catch (e) {}
-// Prolnutí jen při přepnutí šipkou, ostatní přechody (logo → výběr) bez animace
-window.addEventListener('pagereveal', function(e) {
-  if (e.viewTransition && !document.documentElement.classList.contains('switched')) e.viewTransition.skipTransition();
-});
-window.kooksSwitchTo = function(url, stepped) {
-  function go() {
-    try { sessionStorage.setItem('kooksSwitch', '1'); } catch (e) {}
-    location.href = url;
+
+(function() {
+  var ac = null;
+  function tone(type, f0, f1, t, dur, vol) {
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.6);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t); o.stop(t + dur + 0.02);
   }
-  if (window.scrollY < 2) return go();
-  if (stepped) {
-    // hry: skokově po kouscích nahoru
-    var y0 = window.scrollY, i = 0, n = 5;
-    var t = setInterval(function() {
-      i++;
-      window.scrollTo({ top: Math.round(y0 * (1 - i / n)), behavior: 'instant' });
-      if (i >= n) { clearInterval(t); setTimeout(go, 90); }
-    }, 70);
-  } else {
-    // hudba: plynule nahoru
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    var start = Date.now();
-    (function wait() {
-      if (window.scrollY < 2 || Date.now() - start > 1500) return setTimeout(go, 120);
-      requestAnimationFrame(wait);
-    })();
-  }
-};
+  // 'music' = měkké arpeggio (C dur), 'games' = 8bit „power-up“
+  window.kooksSound = function(kind) {
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      var t = ac.currentTime + 0.02;
+      if (kind === 'music') {
+        [523.25, 659.25, 783.99, 1046.5].forEach(function(f, i) {
+          tone('triangle', f, f, t + i * 0.11, 0.9, 0.07);
+          tone('sine', f / 2, f / 2, t + i * 0.11, 0.9, 0.03);
+        });
+      } else {
+        [392, 523.25, 659.25, 783.99, 1046.5].forEach(function(f, i) {
+          tone('square', f, f * 1.06, t + i * 0.055, 0.09, 0.035);
+        });
+        tone('square', 1568, 2093, t + 0.3, 0.18, 0.03);
+      }
+    } catch (e) {}
+  };
+})();
 </script>
 <style>
-  @view-transition { navigation: auto; }
-  nav { view-transition-name: kooks-nav; }
-  .hero-eyebrow { view-transition-name: kooks-eyebrow; }
-  .hero-title { view-transition-name: kooks-title; }
-  .hero-sub { view-transition-name: kooks-sub; }
-  .hero-cta { view-transition-name: kooks-cta; }
-  html.switched .hero-eyebrow, html.switched .hero-title,
-  html.switched .hero-sub, html.switched .hero-cta { animation: none; }
-  html.switched body.choosing { overflow: auto; }
-  /* hry = skokové: prolnutí po krocích */
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
-    animation-duration: 0.6s; animation-timing-function: steps(6, end);
+  #pageWipe {
+    position: fixed; inset: 0; z-index: 20000; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    transform: translateX(100%); visibility: hidden;
   }
+  #pageWipe span {
+    font-family: 'Bebas Neue', sans-serif; font-size: clamp(4rem, 14vw, 12rem);
+    letter-spacing: 0.1em; color: #080808;
+  }
+  html.wipe-in #pageWipe { transform: none; visibility: visible; }
 </style>
 </head>
 <body>
+<div id="pageWipe" aria-hidden="true"><span></span></div>
+<script>
+(function() {
+  var el = document.getElementById('pageWipe'), txt = el.firstChild;
+  // hudba = analogová (plynule), hry = skokové (po krocích)
+  var TARGETS = {
+    games: { url: 'games.html', dir: 'right', color: '#2ec4ff', label: 'Games', ease: 'steps(6, end)' },
+    music: { url: './', dir: 'left', color: '#c0392b', label: 'Music', ease: 'cubic-bezier(.7,0,.3,1)' }
+  };
+  function paint(w) { el.style.background = w.color; txt.textContent = w.label; }
+
+  // Příchod: panel zakrývá stránku a odjede dál stejným směrem
+  var w = window._kooksWipe;
+  if (w) {
+    paint(w);
+    requestAnimationFrame(function() { requestAnimationFrame(function() {
+      el.style.transition = 'transform 0.55s ' + w.ease;
+      el.style.transform = 'translateX(' + (w.dir === 'right' ? '-100%' : '100%') + ')';
+      setTimeout(function() {
+        document.documentElement.classList.remove('wipe-in');
+        el.style.transition = el.style.transform = '';
+      }, 600);
+    }); });
+  }
+
+  function wipe(w) {
+    try { sessionStorage.setItem('kooksWipe', JSON.stringify(w)); } catch (e) {}
+    paint(w);
+    el.style.transition = 'none';
+    el.style.visibility = 'visible';
+    el.style.transform = 'translateX(' + (w.dir === 'right' ? '100%' : '-100%') + ')';
+    el.offsetWidth;
+    el.style.transition = 'transform 0.55s ' + w.ease;
+    el.style.transform = 'none';
+    setTimeout(function() { location.href = w.url; }, 560);
+  }
+
+  // Přepnutí: zvuk hned, pak nahoru (hudba plynule, hry skokově), pak panel
+  window.kooksSwitchTo = function(kind, stepped) {
+    var w = TARGETS[kind];
+    kooksSound(kind);
+    if (window.scrollY < 2) return wipe(w);
+    if (stepped) {
+      var y0 = window.scrollY, i = 0, n = 5;
+      var t = setInterval(function() {
+        i++;
+        window.scrollTo({ top: Math.round(y0 * (1 - i / n)), behavior: 'instant' });
+        if (i >= n) { clearInterval(t); setTimeout(function() { wipe(w); }, 60); }
+      }, 70);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      var start = Date.now();
+      (function wait() {
+        if (window.scrollY < 2 || Date.now() - start > 1500) return wipe(w);
+        requestAnimationFrame(wait);
+      })();
+    }
+  };
+
+  // Návrat tlačítkem Zpět (stránka z cache) — schovat panel
+  window.addEventListener('pageshow', function(e) {
+    if (!e.persisted) return;
+    document.documentElement.classList.remove('wipe-in');
+    el.style.transition = el.style.transform = el.style.visibility = '';
+  });
+})();
+</script>
 
 <nav>
   <a href="./" class="nav-logo">KOOKS</a>
@@ -368,7 +438,7 @@ window.kooksSwitchTo = function(url, stepped) {
     a.addEventListener('click', function(e) {
       e.preventDefault();
       try { sessionStorage.setItem('kooksSkipChooser', '1'); } catch (err) {}
-      kooksSwitchTo('./', true);
+      kooksSwitchTo('music', true);
     });
   });
 
