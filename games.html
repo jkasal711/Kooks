@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>KOOKS — Games</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232ec4ff'/%3E%3Cpath d='M9 7h4v7.5L19.5 7h5l-7.2 8 7.7 10h-5l-5.4-7.3-1.6 1.8V25H9z' fill='%2305080b'/%3E%3C/svg%3E"/>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -71,6 +72,8 @@
     color: var(--muted); transition: color 0.2s;
   }
   .nav-links a:hover { color: var(--cyan); }
+  .nav-links a.nav-switch { color: var(--red); }
+  .nav-links a.nav-switch:hover { color: var(--off-white); }
 
   /* ── HERO ── */
   .hero {
@@ -206,7 +209,7 @@
   <ul class="nav-links">
     <li><a href="#game">Game</a></li>
     <li><a href="#devlog">Dev log</a></li>
-    <li><a href="./">← Music</a></li>
+    <li><a href="./" class="to-music nav-switch">← Music</a></li>
   </ul>
 </nav>
 
@@ -261,10 +264,31 @@
 
 <footer>
   <span>© Kooks</span>
-  <a href="./">Back to music →</a>
+  <a href="./" class="to-music">Back to music →</a>
 </footer>
 
 <script>
+(function() {
+  // „← Music“ jde rovnou na hudbu bez výběru; logo KOOKS vede na výběr
+  document.querySelectorAll('.to-music').forEach(function(a) {
+    a.addEventListener('click', function() {
+      try { sessionStorage.setItem('kooksSkipChooser', '1'); } catch (e) {}
+    });
+  });
+
+  // Odkazy na sekce jen posunou stránku a nemění adresu
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  window.scrollTo(0, 0);
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    e.preventDefault();
+    var t = document.getElementById(a.getAttribute('href').slice(1));
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+})();
+
 (function() {
   // Postupné zobrazení sekcí + animace progress baru
   var fill = document.getElementById('progressFill');

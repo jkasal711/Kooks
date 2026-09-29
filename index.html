@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>KOOKS</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23c0392b'/%3E%3Cpath d='M9 7h4v7.5L19.5 7h5l-7.2 8 7.7 10h-5l-5.4-7.3-1.6 1.8V25H9z' fill='%23f2ede6'/%3E%3C/svg%3E"/>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;1,300&family=Playfair+Display:ital,wght@1,400;1,700&display=swap" rel="stylesheet"/>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -61,6 +62,8 @@
     transition: color 0.2s;
   }
   .nav-links a:hover { color: var(--off-white); }
+  .nav-links a.nav-switch { color: #2ec4ff; }
+  .nav-links a.nav-switch:hover { color: var(--off-white); }
 
   /* ── HERO ── */
   .hero {
@@ -880,14 +883,30 @@
 <script>
 (function() {
   var chooser = document.getElementById('chooser');
-  // Přímý odkaz na sekci (např. #releases) chooser přeskočí
-  if (location.hash && location.hash !== '#') {
-    chooser.remove();
-    return;
-  }
-  document.body.classList.add('choosing');
 
-  var ac = null, done = false;
+  // Adresa bez #kotvy a stránka vždy od začátku — reload tak vždy
+  // vrátí na výběr, i když předtím proběhl klik na Discography apod.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  window.scrollTo(0, 0);
+
+  // Odkazy na sekce (#releases, #discography…) jen plynule posunou
+  // stránku a nemění adresu
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest('a[href^="#"]');
+    if (!a || e.defaultPrevented) return;
+    e.preventDefault();
+    var id = a.getAttribute('href').slice(1);
+    var target = id && document.getElementById(id);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // Šipka „← Music“ z games.html jde rovnou na hudbu (jen jednou,
+  // další reload už zase ukáže výběr)
+  var skip = false;
+  try { skip = sessionStorage.getItem('kooksSkipChooser') === '1'; sessionStorage.removeItem('kooksSkipChooser'); } catch (e) {}
+
+  var ac = null, done = true;
   function blip(freq) {
     try {
       if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -901,6 +920,18 @@
     } catch (e) {}
   }
 
+  function show() {
+    done = false;
+    chooser.classList.remove('pick-music', 'pick-games', 'gone');
+    document.body.classList.add('choosing');
+  }
+  function hide() {
+    done = true;
+    chooser.classList.add('gone');
+    document.body.classList.remove('choosing');
+  }
+  window.showChooser = show;
+
   function pick(side) {
     if (done) return;
     done = true;
@@ -910,41 +941,56 @@
       setTimeout(function() { location.href = 'games.html'; }, 550);
       return;
     }
-    setTimeout(function() {
-      chooser.classList.add('gone');
-      document.body.classList.remove('choosing');
-      setTimeout(function() { chooser.remove(); }, 800);
-    }, 450);
+    setTimeout(hide, 450);
   }
+
+  if (skip) {
+    chooser.style.transition = 'none';
+    hide();
+    setTimeout(function() { chooser.style.transition = ''; }, 50);
+  } else show();
 
   chooser.addEventListener('click', function(e) {
     var btn = e.target.closest('[data-pick]');
     if (btn) pick(btn.getAttribute('data-pick'));
   });
-  document.addEventListener('keydown', function onKey(e) {
-    if (done) return document.removeEventListener('keydown', onKey);
+  document.addEventListener('keydown', function(e) {
+    if (done) return;
     if (e.key === '1') pick('music');
     if (e.key === '2') pick('games');
   });
 
+  // Logo KOOKS vrací na výběr. Čeká chvilku, aby dál fungoval
+  // easter egg s 5 rychlými kliky na logo.
+  var logoStreak = 0, logoWait = null;
+  window.kooksLogoClick = function() {
+    logoStreak++;
+    clearTimeout(logoWait);
+    logoWait = setTimeout(function() {
+      if (logoStreak < 5) {
+        if (typeof backToDiscography === 'function') backToDiscography();
+        window.scrollTo(0, 0);
+        show();
+      }
+      logoStreak = 0;
+    }, 700);
+  };
+
   // Návrat tlačítkem Zpět z games.html (bfcache) — ukázat výběr znovu
   window.addEventListener('pageshow', function(e) {
-    if (e.persisted && chooser.classList.contains('pick-games')) {
-      done = false;
-      chooser.classList.remove('pick-games');
-    }
+    if (e.persisted && chooser.classList.contains('pick-games')) show();
   });
 })();
 </script>
 
 <!-- NAV -->
 <nav>
-  <a class="nav-logo" href="#" onclick="backToDiscography(); return false;">KOOKS</a>
+  <a class="nav-logo" href="./" onclick="kooksLogoClick(); return false;">KOOKS</a>
   <ul class="nav-links">
-    <li><a href="#releases">Releases</a></li>
     <li><a href="#discography" onclick="backToDiscography()">Discography</a></li>
     <li><a href="#" onclick="openStream(); return false;">Stream</a></li>
     <li><a href="#" onclick="openContact(); return false;">Contact</a></li>
+    <li><a href="games.html" class="nav-switch">&larr; Games</a></li>
   </ul>
 </nav>
 
@@ -1319,7 +1365,7 @@
     <a href="https://www.instagram.com/jindrak7/" target="_blank" rel="noopener">Instagram</a>
     <a href="#" onclick="openStream(); return false;">Stream</a>
     <a href="https://www.youtube.com/@Kooksa" target="_blank" rel="noopener">YouTube</a>
-    <a href="#" onclick="openTours(); return false;">Tours</a>
+    <a href="#" onclick="openContact(); return false;">Contact</a>
   </div>
 </footer>
 
