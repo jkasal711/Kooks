@@ -698,6 +698,49 @@
   }
   .contact-close:hover { color: var(--off-white); border-color: var(--off-white); }
 </style>
+<script>
+// Vždy nejnovější verze: porovná uloženou stránku s tou na serveru
+// (podle ETag). Když se liší, stáhne novou a jednou obnoví stránku.
+(function() {
+  if (!window.fetch) return;
+  var path = location.pathname, key = 'kooksFresh:' + path;
+  try { if (sessionStorage.getItem(key)) { sessionStorage.removeItem(key); return; } } catch (e) { return; }
+  function tag(r) { return r.headers.get('etag') || r.headers.get('last-modified'); }
+  Promise.all([
+    fetch(path, { cache: 'force-cache' }),
+    fetch(path, { method: 'HEAD', cache: 'no-store' })
+  ]).then(function(res) {
+    var a = tag(res[0]), b = tag(res[1]);
+    if (!a || !b || a === b) return;
+    return fetch(path, { cache: 'reload' }).then(function() {
+      try { sessionStorage.setItem(key, '1'); } catch (e) {}
+      location.reload();
+    });
+  }).catch(function() {});
+  // druhou stránku rovnou taky osvěžit, ať je přepnutí aktuální
+  var other = /games\.html$/.test(path) ? path.replace(/games\.html$/, '') : path.replace(/[^\/]*$/, '') + 'games.html';
+  window.addEventListener('load', function() {
+    fetch(other, { method: 'HEAD', cache: 'no-store' }).then(function(h) {
+      return fetch(other, { cache: 'force-cache' }).then(function(c) {
+        if (h.headers.get('etag') && h.headers.get('etag') !== c.headers.get('etag')) fetch(other, { cache: 'reload' });
+      });
+    }).catch(function() {});
+  });
+})();
+
+// Horní lišta se při posunu dolů schová, při posunu nahoru zase ukáže
+document.addEventListener('DOMContentLoaded', function() {
+  var nav = document.querySelector('nav'), lastY = window.scrollY;
+  if (!nav) return;
+  nav.style.transition = 'transform 0.35s ease';
+  window.addEventListener('scroll', function() {
+    var y = window.scrollY;
+    if (y > lastY + 4 && y > 80) nav.style.transform = 'translateY(-100%)';
+    else if (y < lastY - 4 || y <= 80) nav.style.transform = '';
+    lastY = y;
+  }, { passive: true });
+});
+</script>
 <!-- Přepnutí Music ↔ Games: stránka vyjede nahoru, přejede barevný panel
      a zazní zvuk — melodický pro hudbu, arkádový pro hry -->
 <script>
@@ -960,7 +1003,8 @@ try {
     font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; letter-spacing: 0.1em;
     pointer-events: none; transition: opacity 0.4s;
   }
-  #chooser:hover .ch-or { opacity: 0; }
+  #chooser:hover .ch-or,
+  #chooser.pick-music .ch-or, #chooser.pick-games .ch-or { opacity: 0; }
 
   /* výběr hudby — strana „vybuchne“ přes celou obrazovku */
   #chooser.pick-music .ch-side.music,
@@ -1106,7 +1150,7 @@ try {
 <!-- HERO -->
 <div class="hero">
   <div class="hero-bg"></div>
-  <p class="hero-eyebrow">Jindřich Kasal — Official Site</p>
+  <p class="hero-eyebrow">Jindřich Kasal — Official Music</p>
   <h1 class="hero-title">
     <div class="row">
       <span class="letter filled" id="kl-k1">K</span>
