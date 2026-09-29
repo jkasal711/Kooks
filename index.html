@@ -698,6 +698,245 @@
 </head>
 <body>
 
+<!-- ══════════════════════════════════════════════════════
+     CHOOSER — výběr MUSIC / GAMES při startu webu
+     Klik na výběr = první interakce, takže pak hned fungují
+     zvuky při najetí (prohlížeč už nevyžaduje další klik).
+     ══════════════════════════════════════════════════════ -->
+<style>
+  #chooser {
+    --music: #c0392b;
+    --games: #2ec4ff;
+    position: fixed; inset: 0; z-index: 10000;
+    display: flex;
+    background: var(--black);
+    font-family: 'DM Mono', monospace;
+    transition: opacity 0.7s ease, visibility 0.7s;
+  }
+  #chooser.gone { opacity: 0; visibility: hidden; pointer-events: none; }
+  body.choosing { overflow: hidden; }
+  body.choosing .hero, body.choosing .hero * { animation-play-state: paused !important; }
+
+  .ch-title {
+    position: absolute; top: 2.2rem; left: 0; right: 0; z-index: 3;
+    text-align: center; pointer-events: none;
+    font-size: 0.65rem; letter-spacing: 0.45em; text-transform: uppercase;
+    color: var(--off-white); opacity: 0.7;
+    animation: fadeUp 0.8s ease both;
+  }
+  .ch-title b {
+    display: block; margin-top: 0.4rem;
+    font-family: 'Bebas Neue', sans-serif; font-weight: 400;
+    font-size: 1.6rem; letter-spacing: 0.3em; opacity: 1;
+  }
+
+  .ch-side {
+    position: relative; flex: 1; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 3rem; border: 0; margin: 0;
+    background: var(--black); color: var(--off-white);
+    font: inherit; text-align: left; cursor: pointer;
+    transition: flex 0.6s cubic-bezier(.2,.8,.2,1), filter 0.5s ease;
+    animation: fadeUp 0.8s ease both;
+  }
+  .ch-side.games { animation-delay: 0.12s; }
+  .ch-side:focus-visible { outline: 2px solid var(--c); outline-offset: -6px; }
+  .ch-side.music { --c: var(--music); }
+  .ch-side.games { --c: var(--games); }
+
+  /* hover: vybraná strana se roztáhne, druhá ztmavne */
+  @media (hover: hover) {
+    #chooser:hover .ch-side { filter: grayscale(0.8) brightness(0.4); }
+  }
+  #chooser:focus-within .ch-side { filter: grayscale(0.8) brightness(0.4); }
+  #chooser .ch-side:hover,
+  #chooser .ch-side:focus-visible { flex: 1.7; filter: none; }
+
+  .ch-bg {
+    position: absolute; inset: 0; z-index: 0;
+    background-size: cover; background-position: center;
+    transform: scale(1.02);
+    transition: transform 1.2s cubic-bezier(.2,.8,.2,1);
+  }
+  .ch-side:hover .ch-bg { transform: scale(1.1); }
+  .ch-side.music .ch-bg {
+    background-image:
+      linear-gradient(to top, rgba(8,8,8,0.95) 5%, rgba(192,57,43,0.35) 60%, rgba(8,8,8,0.6)),
+      url("We_gon_see.png");
+  }
+  .ch-side.games .ch-bg {
+    background:
+      linear-gradient(to top, rgba(8,8,8,0.95) 5%, rgba(46,196,255,0.18) 65%, rgba(8,8,8,0.7)),
+      repeating-linear-gradient(0deg, rgba(46,196,255,0.10) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(90deg, rgba(46,196,255,0.10) 0 1px, transparent 1px 32px),
+      #06121a;
+  }
+  /* scanlines přes herní stranu */
+  .ch-side.games::before {
+    content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 4px);
+  }
+  /* pixelový „ovladač“ uprostřed herní strany */
+  .ch-pixel {
+    position: absolute; z-index: 1; left: 50%; top: 42%;
+    width: 8px; height: 8px; transform: translate(-50%,-50%) scale(1.4);
+    color: var(--games);
+    box-shadow:
+      -40px -16px, -32px -16px, -24px -16px, 24px -16px, 32px -16px, 40px -16px,
+      -48px -8px, -40px -8px, -32px -8px, -24px -8px, -16px -8px, -8px -8px, 0 -8px, 8px -8px, 16px -8px, 24px -8px, 32px -8px, 40px -8px, 48px -8px,
+      -56px 0, -48px 0, -24px 0, -16px 0, -8px 0, 0 0, 8px 0, 16px 0, 24px 0, 48px 0, 56px 0,
+      -56px 8px, -40px 8px, -24px 8px, -16px 8px, -8px 8px, 0 8px, 8px 8px, 16px 8px, 24px 8px, 32px 8px, 56px 8px,
+      -56px 16px, -48px 16px, -24px 16px, -16px 16px, 16px 16px, 24px 16px, 48px 16px, 56px 16px,
+      -56px 24px, -48px 24px, -40px 24px, -32px 24px, 32px 24px, 40px 24px, 48px 24px, 56px 24px,
+      -56px 32px, -48px 32px, 48px 32px, 56px 32px;
+    filter: drop-shadow(0 0 10px rgba(46,196,255,0.6));
+    opacity: 0.55;
+    transition: opacity 0.5s, transform 1.2s cubic-bezier(.2,.8,.2,1);
+  }
+  .ch-side.games:hover .ch-pixel { opacity: 1; transform: translate(-50%,-50%) scale(1.8); }
+
+  .ch-content { position: relative; z-index: 2; }
+  .ch-key {
+    display: inline-block; margin-bottom: 1rem; padding: 0.25rem 0.55rem;
+    border: 1px solid var(--c); color: var(--c);
+    font-size: 0.6rem; letter-spacing: 0.25em;
+  }
+  .ch-name {
+    display: block;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(4rem, 11vw, 10rem); line-height: 0.85; letter-spacing: 0.04em;
+    transition: color 0.4s, text-shadow 0.4s, letter-spacing 0.6s;
+  }
+  .ch-side:hover .ch-name,
+  .ch-side:focus-visible .ch-name {
+    color: var(--c); letter-spacing: 0.1em;
+    text-shadow: 0 0 40px var(--c);
+  }
+  .ch-sub {
+    display: block; margin-top: 1rem;
+    font-size: 0.65rem; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--muted); transition: color 0.4s;
+  }
+  .ch-side:hover .ch-sub { color: var(--off-white); }
+  .ch-bar {
+    position: absolute; left: 0; bottom: 0; z-index: 2;
+    height: 4px; width: 0; background: var(--c);
+    box-shadow: 0 0 20px var(--c);
+    transition: width 0.6s cubic-bezier(.2,.8,.2,1);
+  }
+  .ch-side:hover .ch-bar, .ch-side:focus-visible .ch-bar { width: 100%; }
+
+  .ch-or {
+    position: absolute; left: 50%; top: 50%; z-index: 4;
+    transform: translate(-50%,-50%);
+    width: 3.6rem; height: 3.6rem; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--black); border: 1px solid var(--border);
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; letter-spacing: 0.1em;
+    pointer-events: none; transition: opacity 0.4s;
+  }
+  #chooser:hover .ch-or { opacity: 0; }
+
+  /* výběr hudby — strana „vybuchne“ přes celou obrazovku */
+  #chooser.pick-music .ch-side.music,
+  #chooser.pick-games .ch-side.games { flex: 20; filter: none; }
+
+  @media (max-width: 700px) {
+    #chooser { flex-direction: column; }
+    .ch-side { padding: 1.5rem 1.25rem; }
+    .ch-title { top: 1rem; }
+    .ch-title b { font-size: 1.2rem; }
+    .ch-pixel { top: 45%; transform: translate(-50%,-50%) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ch-side, .ch-bg, .ch-name, .ch-bar, .ch-pixel { transition: none; }
+  }
+</style>
+
+<div id="chooser" role="dialog" aria-label="Choose: music or games">
+  <p class="ch-title">Kooks<b>Choose your side</b></p>
+  <button class="ch-side music" type="button" data-pick="music">
+    <span class="ch-bg"></span>
+    <span class="ch-content">
+      <span class="ch-key">[1]</span>
+      <span class="ch-name">Music</span>
+      <span class="ch-sub">Albums · Previews · Discography</span>
+    </span>
+    <span class="ch-bar"></span>
+  </button>
+  <span class="ch-or">or</span>
+  <button class="ch-side games" type="button" data-pick="games">
+    <span class="ch-bg"></span>
+    <span class="ch-pixel" aria-hidden="true"></span>
+    <span class="ch-content">
+      <span class="ch-key">[2]</span>
+      <span class="ch-name">Games</span>
+      <span class="ch-sub">In development · Dev log</span>
+    </span>
+    <span class="ch-bar"></span>
+  </button>
+</div>
+
+<script>
+(function() {
+  var chooser = document.getElementById('chooser');
+  // Přímý odkaz na sekci (např. #releases) chooser přeskočí
+  if (location.hash && location.hash !== '#') {
+    chooser.remove();
+    return;
+  }
+  document.body.classList.add('choosing');
+
+  var ac = null, done = false;
+  function blip(freq) {
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square'; o.frequency.value = freq;
+      o.frequency.exponentialRampToValueAtTime(freq * 2, ac.currentTime + 0.12);
+      g.gain.setValueAtTime(0.05, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.25);
+      o.connect(g); g.connect(ac.destination);
+      o.start(); o.stop(ac.currentTime + 0.25);
+    } catch (e) {}
+  }
+
+  function pick(side) {
+    if (done) return;
+    done = true;
+    chooser.classList.add('pick-' + side);
+    blip(side === 'music' ? 220 : 330);
+    if (side === 'games') {
+      setTimeout(function() { location.href = 'games.html'; }, 550);
+      return;
+    }
+    setTimeout(function() {
+      chooser.classList.add('gone');
+      document.body.classList.remove('choosing');
+      setTimeout(function() { chooser.remove(); }, 800);
+    }, 450);
+  }
+
+  chooser.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-pick]');
+    if (btn) pick(btn.getAttribute('data-pick'));
+  });
+  document.addEventListener('keydown', function onKey(e) {
+    if (done) return document.removeEventListener('keydown', onKey);
+    if (e.key === '1') pick('music');
+    if (e.key === '2') pick('games');
+  });
+
+  // Návrat tlačítkem Zpět z games.html (bfcache) — ukázat výběr znovu
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted && chooser.classList.contains('pick-games')) {
+      done = false;
+      chooser.classList.remove('pick-games');
+    }
+  });
+})();
+</script>
+
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="#" onclick="backToDiscography(); return false;">KOOKS</a>
@@ -2644,7 +2883,7 @@ function backToDiscography() {
 (function() {
   var SEG_DUR = 16.0;
   var XFADE   = 16/24;
-  var MAX_VOL = 0.75;
+  var MAX_VOL = 0.4;
 
   var PREVIEWS = {
     mwt: { src: 'Album_1_full_preview.mp3', total: 464.0, label: 'Monkey with Tool' },
