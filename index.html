@@ -698,8 +698,71 @@
   }
   .contact-close:hover { color: var(--off-white); border-color: var(--off-white); }
 </style>
+<!-- Přechod mezi Music a Games: barevný panel přejede přes obrazovku -->
+<script>
+try {
+  var _w = JSON.parse(sessionStorage.getItem('kooksWipe') || 'null');
+  sessionStorage.removeItem('kooksWipe');
+  if (_w) { window._kooksWipe = _w; document.documentElement.classList.add('wipe-in'); }
+} catch (e) {}
+</script>
+<style>
+  #pageWipe {
+    position: fixed; inset: 0; z-index: 20000; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    transform: translateX(100%); visibility: hidden;
+  }
+  #pageWipe span {
+    font-family: 'Bebas Neue', sans-serif; font-size: clamp(4rem, 14vw, 12rem);
+    letter-spacing: 0.1em; color: #080808;
+  }
+  html.wipe-in #pageWipe { transform: none; visibility: visible; }
+</style>
 </head>
 <body>
+<div id="pageWipe" aria-hidden="true"><span></span></div>
+<script>
+(function() {
+  var el = document.getElementById('pageWipe'), txt = el.firstChild;
+  var EASE = 'transform 0.55s cubic-bezier(.7,0,.3,1)';
+  function paint(w) { el.style.background = w.color; txt.textContent = w.label; }
+
+  // Příchod: panel zakrývá stránku a odjede dál stejným směrem
+  var w = window._kooksWipe;
+  if (w) {
+    paint(w);
+    requestAnimationFrame(function() { requestAnimationFrame(function() {
+      el.style.transition = EASE;
+      el.style.transform = 'translateX(' + (w.dir === 'right' ? '-100%' : '100%') + ')';
+      setTimeout(function() {
+        document.documentElement.classList.remove('wipe-in');
+        el.style.transition = el.style.transform = '';
+      }, 600);
+    }); });
+  }
+
+  // Odchod: dir 'right' = panel přijede zprava (Games), 'left' = zleva (Music)
+  window.kooksWipeTo = function(url, dir, color, label) {
+    var data = { dir: dir, color: color, label: label };
+    try { sessionStorage.setItem('kooksWipe', JSON.stringify(data)); } catch (e) {}
+    paint(data);
+    el.style.transition = 'none';
+    el.style.visibility = 'visible';
+    el.style.transform = 'translateX(' + (dir === 'right' ? '100%' : '-100%') + ')';
+    el.offsetWidth;
+    el.style.transition = EASE;
+    el.style.transform = 'none';
+    setTimeout(function() { location.href = url; }, 560);
+  };
+
+  // Návrat tlačítkem Zpět (stránka z cache) — schovat panel
+  window.addEventListener('pageshow', function(e) {
+    if (!e.persisted) return;
+    document.documentElement.classList.remove('wipe-in');
+    el.style.transition = el.style.transform = el.style.visibility = '';
+  });
+})();
+</script>
 
 <!-- ══════════════════════════════════════════════════════
      CHOOSER — výběr MUSIC / GAMES při startu webu
@@ -973,7 +1036,7 @@
         show();
       }
       logoStreak = 0;
-    }, 700);
+    }, 450);
   };
 
   // Návrat tlačítkem Zpět z games.html (bfcache) — ukázat výběr znovu
@@ -990,7 +1053,7 @@
     <li><a href="#discography" onclick="backToDiscography()">Discography</a></li>
     <li><a href="#" onclick="openStream(); return false;">Stream</a></li>
     <li><a href="#" onclick="openContact(); return false;">Contact</a></li>
-    <li><a href="games.html" class="nav-switch">&larr; Games</a></li>
+    <li><a href="games.html" class="nav-switch" onclick="kooksWipeTo('games.html', 'right', '#2ec4ff', 'Games'); return false;">Games &rarr;</a></li>
   </ul>
 </nav>
 

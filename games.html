@@ -65,7 +65,6 @@
   .nav-logo {
     font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.25em;
   }
-  .nav-logo span { color: var(--cyan); }
   .nav-links { display: flex; gap: 2.5rem; list-style: none; }
   .nav-links a {
     font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase;
@@ -75,38 +74,69 @@
   .nav-links a.nav-switch { color: var(--red); }
   .nav-links a.nav-switch:hover { color: var(--off-white); }
 
-  /* ── HERO ── */
+  /* ── HERO — stejné rozložení KOOKS jako u hudby, jen v modré ── */
   .hero {
-    min-height: 100vh; padding: 8rem 3rem 4rem;
-    display: flex; flex-direction: column; justify-content: center;
-    position: relative;
+    min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 0 3rem 4rem;
+    position: relative; overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 60% 40%, rgba(46,196,255,0.10) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 20% 80%, rgba(232,226,217,0.03) 0%, transparent 60%);
   }
   .hero-eyebrow {
+    position: relative;
     font-size: 0.6rem; letter-spacing: 0.35em; text-transform: uppercase;
     color: var(--muted); margin-bottom: 1rem;
     animation: fadeUp 1s ease both;
   }
   .hero-title {
-    font-family: 'Bebas Neue', sans-serif; font-weight: 400;
-    font-size: clamp(6rem, 20vw, 18rem); line-height: 0.85; letter-spacing: 0.04em;
-    color: var(--cyan);
-    animation: fadeUp 1s 0.1s ease both, glitch 5s 1.2s infinite;
+    position: relative; z-index: 1;
+    font-weight: 400; line-height: 0.85;
+    animation: fadeUp 1s 0.1s ease both;
+  }
+  .hero-title .row { display: flex; align-items: baseline; gap: 0.04em; }
+  .hero-title .row-2 { padding-left: clamp(3rem, 8vw, 9rem); }
+  .hero-title .letter, .hero-title .o-ring {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(6rem, 16vw, 16rem);
+    letter-spacing: -0.01em;
+    display: inline-block;
+    color: transparent;
+    transition: color 0.3s, -webkit-text-stroke 0.3s, text-shadow 0.3s;
+  }
+  .hero-title .letter { -webkit-text-stroke: 1.5px var(--off-white); }
+  .hero-title .letter.filled { color: var(--off-white); -webkit-text-stroke: 0; }
+  .hero-title .o-ring { -webkit-text-stroke: 1.5px var(--cyan); animation: glitch 5s 1.2s infinite; }
+  .hero-title .o-ring + .o-ring { animation-delay: 3.7s; }
+  .hero-title .letter:hover, .hero-title .o-ring:hover {
+    color: var(--cyan); -webkit-text-stroke: 0;
+    text-shadow: 0 0 40px rgba(46,196,255,0.6);
   }
   .hero-sub {
-    margin-top: 2rem; max-width: 34rem;
-    font-size: 0.8rem; line-height: 1.8; color: var(--muted);
+    position: relative;
+    display: flex; align-items: center; gap: 2rem;
+    margin-top: 2rem;
     animation: fadeUp 1s 0.2s ease both;
   }
-  .press-start {
-    margin-top: 3rem; align-self: flex-start;
-    font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.3em;
-    padding: 0.8rem 1.6rem; border: 1px solid var(--cyan); color: var(--cyan);
-    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  .hero-sub p {
+    font-size: 0.65rem; letter-spacing: 0.15em;
+    color: var(--muted); text-transform: uppercase;
+  }
+  .hero-cta {
+    position: relative;
+    display: inline-block; margin-top: 2.5rem; width: fit-content;
+    padding: 0.85rem 2.5rem;
+    border: 1px solid var(--cyan);
+    font-size: 0.65rem; letter-spacing: 0.25em; text-transform: uppercase;
+    color: var(--cyan);
+    transition: background 0.25s, color 0.25s, box-shadow 0.25s;
     animation: fadeUp 1s 0.3s ease both;
   }
-  .press-start span { animation: blink 1.1s step-end infinite; }
-  .press-start:hover { background: var(--cyan); color: var(--black); box-shadow: 0 0 40px rgba(46,196,255,0.5); }
-  .press-start:hover span { animation: none; }
+  .hero-cta:hover { background: var(--cyan); color: var(--black); box-shadow: 0 0 40px rgba(46,196,255,0.4); }
 
   /* ── SECTIONS ── */
   section { padding: 6rem 3rem; border-top: 1px solid var(--border); }
@@ -201,26 +231,101 @@
     .reveal { opacity: 1; transform: none; }
   }
 </style>
+<!-- Přechod mezi Music a Games: barevný panel přejede přes obrazovku -->
+<script>
+try {
+  var _w = JSON.parse(sessionStorage.getItem('kooksWipe') || 'null');
+  sessionStorage.removeItem('kooksWipe');
+  if (_w) { window._kooksWipe = _w; document.documentElement.classList.add('wipe-in'); }
+} catch (e) {}
+</script>
+<style>
+  #pageWipe {
+    position: fixed; inset: 0; z-index: 20000; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    transform: translateX(100%); visibility: hidden;
+  }
+  #pageWipe span {
+    font-family: 'Bebas Neue', sans-serif; font-size: clamp(4rem, 14vw, 12rem);
+    letter-spacing: 0.1em; color: #080808;
+  }
+  html.wipe-in #pageWipe { transform: none; visibility: visible; }
+</style>
 </head>
 <body>
+<div id="pageWipe" aria-hidden="true"><span></span></div>
+<script>
+(function() {
+  var el = document.getElementById('pageWipe'), txt = el.firstChild;
+  var EASE = 'transform 0.55s cubic-bezier(.7,0,.3,1)';
+  function paint(w) { el.style.background = w.color; txt.textContent = w.label; }
+
+  // Příchod: panel zakrývá stránku a odjede dál stejným směrem
+  var w = window._kooksWipe;
+  if (w) {
+    paint(w);
+    requestAnimationFrame(function() { requestAnimationFrame(function() {
+      el.style.transition = EASE;
+      el.style.transform = 'translateX(' + (w.dir === 'right' ? '-100%' : '100%') + ')';
+      setTimeout(function() {
+        document.documentElement.classList.remove('wipe-in');
+        el.style.transition = el.style.transform = '';
+      }, 600);
+    }); });
+  }
+
+  // Odchod: dir 'right' = panel přijede zprava (Games), 'left' = zleva (Music)
+  window.kooksWipeTo = function(url, dir, color, label) {
+    var data = { dir: dir, color: color, label: label };
+    try { sessionStorage.setItem('kooksWipe', JSON.stringify(data)); } catch (e) {}
+    paint(data);
+    el.style.transition = 'none';
+    el.style.visibility = 'visible';
+    el.style.transform = 'translateX(' + (dir === 'right' ? '100%' : '-100%') + ')';
+    el.offsetWidth;
+    el.style.transition = EASE;
+    el.style.transform = 'none';
+    setTimeout(function() { location.href = url; }, 560);
+  };
+
+  // Návrat tlačítkem Zpět (stránka z cache) — schovat panel
+  window.addEventListener('pageshow', function(e) {
+    if (!e.persisted) return;
+    document.documentElement.classList.remove('wipe-in');
+    el.style.transition = el.style.transform = el.style.visibility = '';
+  });
+})();
+</script>
 
 <nav>
-  <a href="./" class="nav-logo">KOOKS<span>.</span></a>
+  <a href="./" class="nav-logo">KOOKS</a>
   <ul class="nav-links">
+    <li><a href="./" class="to-music nav-switch">&larr; Music</a></li>
     <li><a href="#game">Game</a></li>
     <li><a href="#devlog">Dev log</a></li>
-    <li><a href="./" class="to-music nav-switch">← Music</a></li>
   </ul>
 </nav>
 
+<!-- HERO -->
 <header class="hero">
+  <div class="hero-bg"></div>
   <p class="hero-eyebrow">Jindřich Kasal — Games</p>
-  <h1 class="hero-title">Games</h1>
-  <p class="hero-sub">
-    Same sound, different world. <!-- TODO: krátký popis, o čem tvoje hry jsou -->
-    Games made by Kooks — currently in development.
-  </p>
-  <a href="#game" class="press-start"><span>▶</span> Press start</a>
+  <h1 class="hero-title">
+    <div class="row">
+      <span class="letter filled">K</span>
+      <span class="o-ring">O</span>
+      <span class="o-ring">O</span>
+    </div>
+    <div class="row row-2">
+      <span class="letter">K</span>
+      <span class="letter filled">S</span>
+    </div>
+  </h1>
+  <div class="hero-sub">
+    <!-- TODO: krátký popis, o čem tvoje hry jsou -->
+    <p>Games · Worlds · Soundtracks</p>
+  </div>
+  <a href="#game" class="hero-cta">Explore Games &darr;</a>
 </header>
 
 <section id="game">
@@ -271,8 +376,10 @@
 (function() {
   // „← Music“ jde rovnou na hudbu bez výběru; logo KOOKS vede na výběr
   document.querySelectorAll('.to-music').forEach(function(a) {
-    a.addEventListener('click', function() {
-      try { sessionStorage.setItem('kooksSkipChooser', '1'); } catch (e) {}
+    a.addEventListener('click', function(e) {
+      e.preventDefault();
+      try { sessionStorage.setItem('kooksSkipChooser', '1'); } catch (err) {}
+      kooksWipeTo('./', 'left', '#c0392b', 'Music');
     });
   });
 
