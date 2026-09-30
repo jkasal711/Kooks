@@ -302,6 +302,7 @@ window.addEventListener('pagereveal', function(e) {
     o.start(t); o.stop(t + dur + 0.02);
   }
   // 'music' = měkké arpeggio (C dur), 'games' = 8bit „power-up“
+  // vrací délku zvuku v ms, ať přepnutí stránky zvuk neusekne
   window.kooksSound = function(kind) {
     try {
       if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -309,26 +310,29 @@ window.addEventListener('pagereveal', function(e) {
       var t = ac.currentTime + 0.02;
       if (kind === 'music') {
         [523.25, 659.25, 783.99, 1046.5].forEach(function(f, i) {
-          tone('triangle', f, f, t + i * 0.11, 0.9, 0.07);
-          tone('sine', f / 2, f / 2, t + i * 0.11, 0.9, 0.03);
+          tone('triangle', f, f, t + i * 0.08, 0.45, 0.07);
+          tone('sine', f / 2, f / 2, t + i * 0.08, 0.45, 0.03);
         });
+        return 720;
       } else {
         [392, 523.25, 659.25, 783.99, 1046.5].forEach(function(f, i) {
           tone('square', f, f * 1.06, t + i * 0.055, 0.09, 0.035);
         });
         tone('square', 1568, 2093, t + 0.3, 0.18, 0.03);
+        return 520;
       }
     } catch (e) {}
+    return 0;
   };
 
   var URLS = { games: 'games.html', music: './' };
   // Přepnutí: zvuk hned, pak nahoru (hudba plynule, hry skokově), pak prolnutí
   window.kooksSwitchTo = function(kind, stepped) {
-    kooksSound(kind);
+    var soundEnd = Date.now() + kooksSound(kind);
     function go() {
       try { sessionStorage.setItem('kooksSwitch', '1'); } catch (e) {}
-      // krátká pauza, ať je zvuk slyšet
-      setTimeout(function() { location.href = URLS[kind]; }, 180);
+      // počkat, až zvuk dozní (jinak ho odchod ze stránky usekne)
+      setTimeout(function() { location.href = URLS[kind]; }, Math.max(0, soundEnd - Date.now()));
     }
     if (window.scrollY < 2) return go();
     if (stepped) {
@@ -497,6 +501,1181 @@ window.addEventListener('pagereveal', function(e) {
 })();
 </script>
 <!-- AFK minihra CityTrack (15 min nečinnosti nebo napsat „kooksbigboobs“) -->
-<script src="citytrack.js?v=1" defer></script>
+<script>
+/* ══════════════════════════════════════════════════════
+   CITYTRACK — AFK minihra herní stránky
+   Spustí se po 15 min nečinnosti nebo napsáním „kooksbigboobs“.
+   Jsme tým T (hráč + 2 boti): prostřílet se do budovy CityTrack,
+   položit bombu a ubránit ji, dokud nevybuchne.
+   CT: puškaři, SMG, štíty, plynové granáty, snipeři, SWAT slaněný
+   z vrtulníku na střechu a breacheři, kteří odpálí novou díru ve zdi.
+   ══════════════════════════════════════════════════════ */
+(function() {
+  'use strict';
+
+  var IDLE_MS = 15 * 60 * 1000;
+  var CHEAT = 'kooksbigboobs';
+
+  // ── Styly + DOM ────────────────────────────────────────
+  var css = [
+  '#ctAlert, #ctGame { position: fixed; inset: 0; z-index: 9500; display: none; font-family: "DM Mono", monospace; color: #e8e2d9; }',
+  '#ctAlert { background: rgba(5,8,11,0.97); flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 1.5rem; }',
+  '#ctAlert.active { display: flex; animation: fadeUp 0.4s ease both; }',
+  '#ctAlert .ct-eyebrow { font-size: 0.6rem; letter-spacing: 0.45em; text-transform: uppercase; color: #ff9f1c; margin-bottom: 1.5rem; animation: blink 0.8s step-end infinite; }',
+  '#ctAlert h2 { font-family: "Bebas Neue", sans-serif; font-weight: 400; font-size: clamp(2.5rem, 6vw, 5rem); letter-spacing: 0.06em; margin-bottom: 0.8rem; }',
+  '#ctAlert h2 b { color: #2ec4ff; font-weight: 400; }',
+  '#ctAlert p { max-width: 36rem; font-size: 0.65rem; line-height: 1.9; letter-spacing: 0.15em; text-transform: uppercase; color: #5d6b75; margin-bottom: 2.5rem; }',
+  '.ct-btn { font-family: "DM Mono", monospace; font-size: 0.6rem; letter-spacing: 0.25em; text-transform: uppercase; background: none; cursor: crosshair; color: #ff9f1c; border: 1px solid #ff9f1c; padding: 0.8rem 2.5rem; transition: background 0.2s, color 0.2s; }',
+  '.ct-btn:hover { background: #ff9f1c; color: #05080b; }',
+  '.ct-link { margin-top: 1.2rem; background: none; border: 0; cursor: crosshair; font-family: "DM Mono", monospace; font-size: 0.55rem; letter-spacing: 0.25em; text-transform: uppercase; color: #5d6b75; }',
+  '.ct-link:hover { color: #e8e2d9; }',
+  '#ctGame { background: #030507; cursor: none; }',
+  '#ctGame.active { display: block; }',
+  '#ctCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }',
+  '.ct-hud { position: absolute; left: 0; right: 0; top: 0; z-index: 2; pointer-events: none; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 0.9rem 1.2rem; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; background: linear-gradient(rgba(3,5,7,0.85), transparent); }',
+  '.ct-hud .obj { color: #ff9f1c; max-width: 30%; line-height: 1.7; }',
+  '.ct-hud .mid { text-align: center; font-family: "Bebas Neue", sans-serif; font-size: 1.8rem; letter-spacing: 0.1em; }',
+  '.ct-hud .mid small { display: block; font-family: "DM Mono", monospace; font-size: 0.55rem; color: #5d6b75; letter-spacing: 0.2em; }',
+  '.ct-hud .team { text-align: right; line-height: 1.9; }',
+  '.ct-hud .team .dead { color: #5d6b75; text-decoration: line-through; }',
+  '.ct-weap { position: absolute; left: 1.2rem; bottom: 2.2rem; z-index: 2; pointer-events: none; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; line-height: 2; }',
+  '.ct-weap span { display: inline-block; padding: 0.15rem 0.6rem; margin-right: 0.3rem; border: 1px solid #26313b; color: #5d6b75; }',
+  '.ct-weap span.on { border-color: #ff9f1c; color: #ff9f1c; }',
+  '.ct-weap b { font-family: "Bebas Neue", sans-serif; font-weight: 400; font-size: 1.6rem; letter-spacing: 0.08em; color: #e8e2d9; }',
+  '.ct-banner { position: absolute; left: 0; right: 0; top: 5.5rem; z-index: 2; pointer-events: none; text-align: center; font-family: "Bebas Neue", sans-serif; font-size: 1.6rem; letter-spacing: 0.12em; color: #2ec4ff; opacity: 0; transition: opacity 0.3s; }',
+  '.ct-banner.show { opacity: 1; }',
+  '.ct-hint { position: absolute; bottom: 0.8rem; left: 0; right: 0; text-align: center; z-index: 2; pointer-events: none; font-size: 0.55rem; letter-spacing: 0.2em; text-transform: uppercase; color: #5d6b75; }',
+  '.ct-result { position: absolute; inset: 0; z-index: 3; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: rgba(3,5,7,0.7); padding: 1.5rem; cursor: crosshair; }',
+  '.ct-result.show { display: flex; animation: fadeUp 0.5s ease both; }',
+  '.ct-result h2 { font-family: "Bebas Neue", sans-serif; font-weight: 400; font-size: clamp(3rem, 8vw, 7rem); letter-spacing: 0.06em; line-height: 0.95; margin-bottom: 1rem; }',
+  '.ct-result p { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: #9aa7b0; margin-bottom: 2.5rem; }',
+  '.ct-result .row { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }'
+  ].join('\n');
+  var st = document.createElement('style');
+  st.textContent = css;
+  document.head.appendChild(st);
+
+  var wrap = document.createElement('div');
+  wrap.innerHTML =
+  '<div id="ctAlert" role="dialog" aria-label="CityTrack">' +
+    '<p class="ct-eyebrow">&#9888; Intercepted transmission &#9888;</p>' +
+    '<h2><b>CityTrack</b> is watching everyone</h2>' +
+    '<p>The government is tracking every click and every camera in the city. ' +
+    'Break into the CityTrack building, plant the bomb and hold it until it blows.</p>' +
+    '<button class="ct-btn" id="ctStart">Join the crew &mdash; go</button>' +
+    '<button class="ct-link" id="ctDecline">Stay offline</button>' +
+  '</div>' +
+  '<div id="ctGame">' +
+    '<canvas id="ctCanvas"></canvas>' +
+    '<div class="ct-hud"><div class="obj" id="ctObj"></div><div class="mid" id="ctMid"></div><div class="team" id="ctTeam"></div></div>' +
+    '<div class="ct-banner" id="ctBanner"></div>' +
+    '<div class="ct-weap" id="ctWeap"></div>' +
+    '<div class="ct-hint">WASD move &middot; mouse aim &middot; click shoot &middot; 1/2/3 or wheel weapon &middot; R reload &middot; G frag &middot; hold E plant &middot; Esc quit</div>' +
+    '<div class="ct-result" id="ctResult"><h2 id="ctResTitle"></h2><p id="ctResSub"></p>' +
+      '<div class="row"><button class="ct-btn" id="ctAgain">Play again</button><button class="ct-btn" id="ctQuit">&larr; Back to site</button></div>' +
+    '</div>' +
+  '</div>';
+  while (wrap.firstChild) document.body.appendChild(wrap.firstChild);
+
+  var $ = function(id) { return document.getElementById(id); };
+  var alertEl = $('ctAlert'), gameEl = $('ctGame'), canvas = $('ctCanvas'), ctx = canvas.getContext('2d');
+
+  // ── Spouštění: nečinnost + cheat ───────────────────────
+  var mode = 'idle', idleTimer = null, cheatBuf = '';
+  var finePointer = window.matchMedia && matchMedia('(pointer: fine)').matches;
+
+  function resetIdle() {
+    if (mode !== 'idle' || !finePointer) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(showAlert, IDLE_MS);
+  }
+  ['mousemove', 'keydown', 'scroll', 'touchstart', 'pointerdown'].forEach(function(e) {
+    window.addEventListener(e, resetIdle, { passive: true });
+  });
+  resetIdle();
+
+  document.addEventListener('keydown', function(e) {
+    if (mode !== 'idle' || !e.key || e.key.length !== 1) return;
+    cheatBuf = (cheatBuf + e.key.toLowerCase()).slice(-CHEAT.length);
+    if (cheatBuf === CHEAT) { cheatBuf = ''; showAlert(); }
+  });
+
+  function showAlert() {
+    if (mode !== 'idle') return;
+    mode = 'alert';
+    clearTimeout(idleTimer);
+    alertEl.classList.add('active');
+  }
+  function backToSite() {
+    stopGame();
+    alertEl.classList.remove('active');
+    gameEl.classList.remove('active');
+    document.body.style.overflow = '';
+    mode = 'idle';
+    resetIdle();
+  }
+  $('ctDecline').onclick = backToSite;
+  $('ctQuit').onclick = backToSite;
+  $('ctStart').onclick = function() {
+    alertEl.classList.remove('active');
+    gameEl.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    mode = 'game';
+    startGame();
+  };
+  $('ctAgain').onclick = function() { startGame(); };
+
+  // ── Zvuky (Web Audio, bez souborů) ─────────────────────
+  var ac = null, noiseBuf = null, lastSnd = {};
+  function audio() {
+    if (!ac) {
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+        var d = noiseBuf.getChannelData(0);
+        for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      } catch (e) { return null; }
+    }
+    if (ac.state === 'suspended') ac.resume();
+    return ac;
+  }
+  var SND = {
+    shot:    { dur: 0.08, f: 1800, type: 'bandpass', vol: 0.05, gap: 0.03 },
+    smg:     { dur: 0.05, f: 2400, type: 'bandpass', vol: 0.03, gap: 0.04 },
+    shotgun: { dur: 0.22, f: 900,  type: 'lowpass',  vol: 0.09, gap: 0.05 },
+    sniper:  { dur: 0.45, f: 700,  type: 'lowpass',  vol: 0.14, gap: 0.05 },
+    block:   { dur: 0.05, f: 3500, type: 'highpass', vol: 0.04, gap: 0.03 },
+    hit:     { dur: 0.06, f: 600,  type: 'bandpass', vol: 0.05, gap: 0.03 },
+    gas:     { dur: 0.6,  f: 900,  type: 'bandpass', vol: 0.05, gap: 0.1 },
+    frag:    { dur: 0.9,  f: 400,  type: 'lowpass',  vol: 0.2,  gap: 0.1 },
+    breach:  { dur: 1.2,  f: 350,  type: 'lowpass',  vol: 0.25, gap: 0.1 },
+    boom:    { dur: 2.6,  f: 300,  type: 'lowpass',  vol: 0.35, gap: 0.1 },
+    reload:  { dur: 0.05, f: 4000, type: 'highpass', vol: 0.03, gap: 0.05 }
+  };
+  function sfx(kind, vol) {
+    var a = audio(); if (!a) return;
+    var o = SND[kind], now = a.currentTime;
+    if (now - (lastSnd[kind] || 0) < o.gap) return;
+    lastSnd[kind] = now;
+    var src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    src.buffer = noiseBuf;
+    f.type = o.type; f.frequency.value = o.f;
+    g.gain.setValueAtTime(o.vol * (vol == null ? 1 : vol), now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + o.dur);
+    src.connect(f); f.connect(g); g.connect(a.destination);
+    src.start(now, Math.random() * 0.5); src.stop(now + o.dur + 0.05);
+  }
+  function beep(freq, dur, vol) {
+    var a = audio(); if (!a) return;
+    var o = a.createOscillator(), g = a.createGain(), now = a.currentTime;
+    o.type = 'square'; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol || 0.03, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    o.connect(g); g.connect(a.destination); o.start(now); o.stop(now + dur + 0.02);
+  }
+
+  // ── Mapa ───────────────────────────────────────────────
+  var W = 1400, H = 900;
+  var B = { x: 700, y: 180, w: 600, h: 540 };           // budova CityTrack
+  var WALL = 18;
+  var SITE = { x: 1000, y: 450, r: 55 };                  // místo A pro bombu
+  var BASE_WALLS = [
+    [700, 180, 260, WALL], [1040, 180, 260, WALL],        // horní zeď (dveře uprostřed)
+    [700, 702, 260, WALL], [1040, 702, 260, WALL],        // spodní zeď
+    [700, 180, WALL, 230], [700, 490, WALL, 230],         // levá zeď (hlavní vchod)
+    [1282, 180, WALL, 540]                                // pravá zeď
+  ];
+  var COVER = [
+    // venku — auta, zátarasy, bedny, nízké zídky (úkryt před snipery)
+    [290, 250, 120, 60], [250, 600, 120, 60],
+    [540, 250, 26, 90], [540, 560, 26, 90],
+    [470, 150, 120, 24], [470, 726, 120, 24],
+    [180, 170, 46, 46], [180, 684, 46, 46], [385, 425, 46, 46],
+    [612, 340, 40, 40], [612, 520, 40, 40],
+    [860, 95, 100, 26], [1080, 95, 100, 26], [860, 779, 100, 26], [1080, 779, 100, 26],
+    // uvnitř — servery, stoly, sloupy
+    [790, 250, 30, 100], [790, 550, 30, 100], [1180, 250, 30, 100], [1180, 550, 30, 100],
+    [935, 300, 130, 24], [935, 576, 130, 24],
+    [862, 420, 24, 60], [1114, 420, 24, 60]
+  ];
+  var OUTSIDE_COVER = 15;
+  var BREACH_SPOTS = [
+    { name: 'east wall',  x: 1291, y: 450, out: { x: 1340, y: 450 }, vertical: true },
+    { name: 'north wall', x: 820,  y: 189, out: { x: 820, y: 145 },  vertical: false },
+    { name: 'south wall', x: 1190, y: 711, out: { x: 1190, y: 752 }, vertical: false }
+  ];
+  var ROOF_DROPS = [{ x: 780, y: 230 }, { x: 1230, y: 230 }, { x: 780, y: 670 }, { x: 1230, y: 670 }, { x: 1000, y: 240 }, { x: 1000, y: 660 }];
+  var SPAWNS = [
+    { x: 1380, y: 110 }, { x: 1380, y: 790 }, { x: 1000, y: 20 },
+    { x: 1000, y: 880 }, { x: 1380, y: 450 }, { x: 780, y: 20 }, { x: 780, y: 880 }
+  ];
+  var BOT_SPOTS = [{ x: 905, y: 372 }, { x: 1095, y: 528 }];
+
+  var walls, solids;
+  function rebuildSolids() { solids = walls.concat(COVER); buildGrid(); }
+
+  function inside(p) { return p.x > B.x + WALL && p.x < B.x + B.w - WALL && p.y > B.y + WALL && p.y < B.y + B.h - WALL; }
+  function pointBlocked(x, y) {
+    if (x < 0 || y < 0 || x > W || y > H) return true;
+    for (var i = 0; i < solids.length; i++) {
+      var s = solids[i];
+      if (x >= s[0] && x <= s[0] + s[2] && y >= s[1] && y <= s[1] + s[3]) return true;
+    }
+    return false;
+  }
+  function circleHits(x, y, r) {
+    if (x < r || y < r || x > W - r || y > H - r) return true;
+    for (var i = 0; i < solids.length; i++) {
+      var s = solids[i];
+      var nx = Math.max(s[0], Math.min(x, s[0] + s[2])), ny = Math.max(s[1], Math.min(y, s[1] + s[3]));
+      if ((x - nx) * (x - nx) + (y - ny) * (y - ny) < r * r) return true;
+    }
+    return false;
+  }
+  function los(a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), n = Math.ceil(d / 10);
+    for (var i = 1; i < n; i++) if (pointBlocked(a.x + dx * i / n, a.y + dy * i / n)) return false;
+    return true;
+  }
+  function walkable(a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), n = Math.ceil(d / 8);
+    for (var i = 1; i <= n; i++) if (circleHits(a.x + dx * i / n, a.y + dy * i / n, 12)) return false;
+    return true;
+  }
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function angDiff(a, b) { var d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  // ── Hledání cesty (A* na mřížce 20 px) — ať se CT nezasekávají ──
+  var CELL = 20, GC = Math.ceil(W / CELL), GR = Math.ceil(H / CELL), grid = null;
+  function buildGrid() {
+    grid = new Uint8Array(GC * GR);
+    for (var r = 0; r < GR; r++) for (var c = 0; c < GC; c++)
+      grid[r * GC + c] = circleHits(c * CELL + CELL / 2, r * CELL + CELL / 2, 12) ? 1 : 0;
+  }
+  function cellIdx(p) {
+    var c = Math.max(0, Math.min(GC - 1, Math.floor(p.x / CELL))), r = Math.max(0, Math.min(GR - 1, Math.floor(p.y / CELL)));
+    if (!grid[r * GC + c]) return r * GC + c;
+    for (var d = 1; d < 6; d++)
+      for (var dr = -d; dr <= d; dr++) for (var dc = -d; dc <= d; dc++) {
+        var cc = c + dc, rr = r + dr;
+        if (cc >= 0 && rr >= 0 && cc < GC && rr < GR && !grid[rr * GC + cc]) return rr * GC + cc;
+      }
+    return -1;
+  }
+  function findPath(a, b) {
+    var s = cellIdx(a), g = cellIdx(b);
+    if (s < 0 || g < 0) return null;
+    var N = GC * GR, gs = new Float32Array(N), from = new Int32Array(N), closed = new Uint8Array(N);
+    gs.fill(1e9); from.fill(-1);
+    var heap = [];
+    function push(f, i) {
+      heap.push([f, i]);
+      for (var k = heap.length - 1; k > 0;) { var p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; var t = heap[p]; heap[p] = heap[k]; heap[k] = t; k = p; }
+    }
+    function pop() {
+      var top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        for (var k = 0;;) {
+          var l = 2 * k + 1, r = l + 1, m = k;
+          if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+          if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+          if (m === k) break;
+          var t = heap[m]; heap[m] = heap[k]; heap[k] = t; k = m;
+        }
+      }
+      return top[1];
+    }
+    var gc = g % GC, gr = (g / GC) | 0;
+    function h(i) { var dc = Math.abs(i % GC - gc), dr = Math.abs(((i / GC) | 0) - gr); return dc + dr - 0.586 * Math.min(dc, dr); }
+    gs[s] = 0; push(h(s), s);
+    var iter = 0;
+    while (heap.length) {
+      var cur = pop();
+      if (cur === g) break;
+      if (closed[cur]) continue;
+      closed[cur] = 1;
+      if (++iter > 3500) break;
+      var cc = cur % GC, cr = (cur / GC) | 0;
+      for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        var nc = cc + dc, nr = cr + dr;
+        if (nc < 0 || nr < 0 || nc >= GC || nr >= GR) continue;
+        var ni = nr * GC + nc;
+        if (grid[ni] || closed[ni]) continue;
+        if (dr && dc && (grid[cr * GC + nc] || grid[nr * GC + cc])) continue;
+        var ng = gs[cur] + (dr && dc ? 1.414 : 1);
+        if (ng < gs[ni]) { gs[ni] = ng; from[ni] = cur; push(ng + h(ni), ni); }
+      }
+    }
+    if (g !== s && from[g] < 0) return null;
+    var pts = [];
+    for (var i = g; i !== s && i >= 0; i = from[i]) pts.push({ x: (i % GC) * CELL + CELL / 2, y: ((i / GC) | 0) * CELL + CELL / 2 });
+    pts.reverse();
+    if (!circleHits(b.x, b.y, 12)) pts.push({ x: b.x, y: b.y });
+    return pts;
+  }
+
+  // ── Zbraně ─────────────────────────────────────────────
+  var GUNS = {
+    rifle:   { name: 'Rifle',   dmg: 20, rate: 0.11, spread: 0.035, pellets: 1, speed: 1000, life: 0.8,  mag: 30, reload: 2.0, snd: 'shot' },
+    shotgun: { name: 'Shotgun', dmg: 13, rate: 0.75, spread: 0.2,   pellets: 8, speed: 850,  life: 0.3,  mag: 6,  reload: 2.4, snd: 'shotgun' },
+    sniper:  { name: 'Sniper',  dmg: 115, rate: 1.25, spread: 0.004, pellets: 1, speed: 2200, life: 0.8, mag: 5,  reload: 3.0, snd: 'sniper' },
+    ctRifle: { dmg: 6,  rate: [0.7, 1.0],  spread: 0.16, speed: 950,  life: 0.8,  snd: 'shot' },
+    smg:     { dmg: 3,  rate: [0.1, 0.17], spread: 0.22, speed: 950,  life: 0.42, snd: 'smg' },
+    pistol:  { dmg: 6,  rate: [1.0, 1.4],  spread: 0.12, speed: 950,  life: 0.7,  snd: 'shot' },
+    ctSniper:{ dmg: 60, rate: [2.2, 2.8],  spread: 0.01, speed: 2400, life: 0.8,  snd: 'sniper' },
+    botRifle:{ dmg: 13, rate: [0.2, 0.3],  spread: 0.09, speed: 1000, life: 0.8,  snd: 'shot' }
+  };
+  var PLAYER_GUNS = ['rifle', 'shotgun', 'sniper'];
+
+  // ── Stav hry ───────────────────────────────────────────
+  var S = null, raf = 0, last = 0;
+  var keys = {}, mouse = { x: 0, y: 0, down: false };
+  var view = { s: 1, ox: 0, oy: 0, dpr: 1 };
+
+  function makeUnit(team, type, x, y, o) {
+    x = Math.max(16, Math.min(W - 16, x)); y = Math.max(16, Math.min(H - 16, y));
+    var u = {
+      team: team, type: type, x: x, y: y, r: 13, angle: team === 'T' ? 0 : Math.PI,
+      hp: 100, maxHp: 100, speed: 150, cool: rnd(0.2, 0.8), think: rnd(0, 0.2),
+      target: null, post: { x: x, y: y }, path: null, pathT: 0, pathGoal: null,
+      slow: 0, flash: 0, calm: 0, gun: 'ctRifle'
+    };
+    for (var k in o) u[k] = o[k];
+    return u;
+  }
+  var CT_TYPES = {
+    rifle:   { hp: 70, speed: 95,  gun: 'ctRifle' },
+    smg:     { hp: 55, speed: 125, gun: 'smg' },
+    shield:  { hp: 90, speed: 70,  gun: 'pistol', shield: true, shieldHp: 160 },
+    grenade: { hp: 70, speed: 95,  gun: 'ctRifle', gren: true },
+    sniper:  { hp: 60, speed: 0,   gun: 'ctSniper', sniper: true },
+    breacher:{ hp: 85, speed: 100, gun: 'smg', breacher: true }
+  };
+  function makeCT(type, x, y, extra) {
+    var t = CT_TYPES[type], o = { hp: t.hp, maxHp: t.hp, speed: t.speed, gun: t.gun, shield: !!t.shield, shieldHp: t.shieldHp || 0,
+      gren: !!t.gren, grenCool: rnd(3, 7), sniper: !!t.sniper, breacher: !!t.breacher, laser: 0 };
+    for (var k in extra) o[k] = extra[k];
+    return makeUnit('CT', type, x, y, o);
+  }
+  function randomWaveType() {
+    var r = Math.random();
+    return r < 0.38 ? 'rifle' : r < 0.62 ? 'smg' : r < 0.8 ? 'grenade' : 'shield';
+  }
+
+  function startGame() {
+    $('ctResult').classList.remove('show');
+    walls = BASE_WALLS.map(function(w) { return w.slice(); });
+    BREACH_SPOTS.forEach(function(b) { b.used = false; b.charge = null; b.done = false; });
+    rebuildSolids();
+    S = {
+      phase: 'assault', t: 0, alarm: false, entered: false,
+      units: [], bullets: [], nades: [], frags: [], gas: [], parts: [], sparks: [], lasers: [],
+      charges: [], helis: [], scorch: [], events: [],
+      plant: 0, bomb: null, bombT: 32, defuse: 0, defusing: false, waveT: 3, wave: 0,
+      roofA: 1, shake: 0, hole: null, boomT: 0, over: false, kills: 0,
+      banner: '', bannerT: 0, breached: []
+    };
+    S.player = makeUnit('T', 'player', 90, 450, {
+      isPlayer: true, speed: 175, name: 'You', hp: 200, maxHp: 200, gun: 'rifle', weapon: 0,
+      ammo: { rifle: 30, shotgun: 6, sniper: 5 }, reloading: 0, frags: 2
+    });
+    S.units.push(S.player);
+    S.units.push(makeUnit('T', 'bot', 70, 395, { bot: true, name: 'Rook', gun: 'botRifle', hp: 120, maxHp: 120, off: { x: -40, y: -45 }, spot: BOT_SPOTS[0] }));
+    S.units.push(makeUnit('T', 'bot', 70, 505, { bot: true, name: 'Vex', gun: 'botRifle', hp: 120, maxHp: 120, off: { x: -40, y: 45 }, spot: BOT_SPOTS[1] }));
+    // stráže venku
+    [['rifle', 600, 300], ['rifle', 610, 610], ['shield', 660, 450], ['smg', 450, 330], ['grenade', 440, 560],
+     ['rifle', 760, 100], ['rifle', 760, 800],
+     ['sniper', 1200, 45], ['sniper', 1360, 850]].forEach(function(p) { S.units.push(makeCT(p[0], p[1], p[2])); });
+    // stráže uvnitř
+    [['rifle', 860, 300], ['smg', 860, 610], ['shield', 1150, 450], ['grenade', 1230, 650]].forEach(function(p) { S.units.push(makeCT(p[0], p[1], p[2])); });
+    resize();
+    cancelAnimationFrame(raf);
+    last = performance.now();
+    raf = requestAnimationFrame(loop);
+  }
+  function stopGame() { cancelAnimationFrame(raf); raf = 0; S = null; keys = {}; mouse.down = false; }
+  window.__citytrack = function() { return S; }; // pro ladění
+
+  function banner(text) { S.banner = text; S.bannerT = 2.8; beep(660, 0.12, 0.03); }
+  function schedule(delay, fn) { S.events.push({ t: S.t + delay, fn: fn }); }
+
+  // ── Vstup ──────────────────────────────────────────────
+  window.addEventListener('keydown', function(e) {
+    if (mode !== 'game') return;
+    var k = e.key.toLowerCase();
+    keys[k] = true;
+    if (e.key === 'Escape') backToSite();
+    if (S && S.player && !S.over) {
+      if (k === '1' || k === '2' || k === '3') switchGun(+k - 1);
+      if (k === 'r') startReload(S.player);
+      if (k === 'g') throwFrag();
+    }
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].indexOf(k) >= 0) e.preventDefault();
+  });
+  window.addEventListener('keyup', function(e) { keys[e.key.toLowerCase()] = false; });
+  canvas.addEventListener('mousemove', function(e) { mouse.x = e.clientX; mouse.y = e.clientY; });
+  canvas.addEventListener('mousedown', function(e) { mouse.x = e.clientX; mouse.y = e.clientY; mouse.down = true; });
+  window.addEventListener('mouseup', function() { mouse.down = false; });
+  canvas.addEventListener('wheel', function(e) {
+    if (!S || S.over) return;
+    e.preventDefault();
+    switchGun((S.player.weapon + (e.deltaY > 0 ? 1 : 2)) % 3);
+  }, { passive: false });
+  canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+  window.addEventListener('resize', function() { if (mode === 'game') resize(); });
+
+  function resize() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
+    var s = Math.min(innerWidth / W, (innerHeight - 20) / H);
+    view.s = s * dpr; view.ox = (innerWidth - W * s) / 2 * dpr; view.oy = ((innerHeight - H * s) / 2 + 10) * dpr;
+    view.dpr = dpr;
+  }
+  function mouseWorld() {
+    return { x: (mouse.x * view.dpr - view.ox) / view.s, y: (mouse.y * view.dpr - view.oy) / view.s };
+  }
+
+  function switchGun(i) {
+    var p = S.player;
+    if (i === p.weapon) return;
+    p.weapon = i; p.gun = PLAYER_GUNS[i]; p.reloading = 0; p.cool = Math.max(p.cool, 0.25);
+    sfx('reload');
+  }
+  function startReload(p) {
+    var g = GUNS[p.gun];
+    if (p.reloading > 0 || p.ammo[p.gun] >= g.mag) return;
+    p.reloading = g.reload;
+    sfx('reload');
+  }
+  function throwFrag() {
+    var p = S.player;
+    if (p.frags <= 0 || p.hp <= 0) return;
+    p.frags--;
+    var m = mouseWorld(), d = dist(p, m), k = Math.min(1, 420 / Math.max(d, 1));
+    S.frags.push({ sx: p.x, sy: p.y, tx: p.x + (m.x - p.x) * k, ty: p.y + (m.y - p.y) * k, t: 0, dur: 0.9 });
+  }
+
+  // ── Pohyb a střelba ────────────────────────────────────
+  function moveUnit(u, dx, dy, dt) {
+    var len = Math.hypot(dx, dy);
+    if (len < 0.001) return 0;
+    var sp = u.speed * (u.slow > 0 ? 0.6 : 1) * dt;
+    var mx = dx / len * sp, my = dy / len * sp, moved = 0;
+    if (!circleHits(u.x + mx, u.y, u.r)) { u.x += mx; moved += Math.abs(mx); }
+    if (!circleHits(u.x, u.y + my, u.r)) { u.y += my; moved += Math.abs(my); }
+    return moved / sp;
+  }
+  // Pohyb po cestě z A*; cesta se přepočítá, když se cíl pohne nebo se jednotka zasekne
+  function steer(u, goal, dt, speedMul) {
+    u.pathT -= dt;
+    var need = !u.path || !u.path.length || u.pathT <= 0 || !u.pathGoal || dist(u.pathGoal, goal) > 40;
+    if (need) {
+      u.path = walkable(u, goal) ? [{ x: goal.x, y: goal.y }] : findPath(u, goal);
+      u.pathGoal = { x: goal.x, y: goal.y };
+      u.pathT = rnd(0.6, 0.9);
+    }
+    if (!u.path || !u.path.length) return;
+    // zkratky: přeskočit body, na které je volná cesta
+    if (u.path.length > 1 && u.think <= 0.05 && walkable(u, u.path[1])) u.path.shift();
+    var wp = u.path[0];
+    if (dist(u, wp) < 10) { u.path.shift(); if (!u.path.length) return; wp = u.path[0]; }
+    var eff = moveUnit(u, wp.x - u.x, wp.y - u.y, dt * (speedMul || 1));
+    if (eff < 0.3) u.pathT = Math.min(u.pathT, 0.1);
+  }
+  function fire(u, ang) {
+    var g = GUNS[u.gun], n = g.pellets || 1;
+    for (var i = 0; i < n; i++) {
+      var a = ang + rnd(-g.spread, g.spread);
+      var sx = u.x + Math.cos(ang) * (u.r + 8), sy = u.y + Math.sin(ang) * (u.r + 8);
+      S.bullets.push({ x: sx, y: sy, vx: Math.cos(a) * g.speed, vy: Math.sin(a) * g.speed, team: u.team,
+        dmg: g.dmg * (u.isPlayer ? 1 : 1), life: g.life * rnd(0.9, 1.1), heavy: u.gun === 'sniper' || u.gun === 'ctSniper' });
+    }
+    u.flash = 0.05;
+    sfx(g.snd, u.isPlayer ? 1 : 0.45);
+  }
+  function enemiesOf(u) { return S.units.filter(function(o) { return o.hp > 0 && !o.rappel && o.team !== u.team; }); }
+  function nearestVisible(u, range) {
+    var best = null, bd = range;
+    enemiesOf(u).forEach(function(o) {
+      var d = dist(u, o);
+      if (d < bd && los(u, o)) { bd = d; best = o; }
+    });
+    return best;
+  }
+  function aimAndShoot(u, t, dt, turn) {
+    var aim = Math.atan2(t.y - u.y, t.x - u.x);
+    u.angle += angDiff(aim, u.angle) * Math.min(1, dt * (turn || 9));
+    u.cool -= dt;
+    if (u.cool <= 0 && Math.abs(angDiff(aim, u.angle)) < 0.25) {
+      var g = GUNS[u.gun];
+      u.cool = rnd(g.rate[0], g.rate[1]);
+      fire(u, u.angle);
+    }
+  }
+
+  // ── Umělá inteligence: boti T ──────────────────────────
+  function aiBot(u, dt) {
+    u.think -= dt;
+    if (u.think <= 0) { u.think = 0.2; u.target = nearestVisible(u, 500); }
+    var p = S.player, goal;
+    if (S.bomb) {
+      // po položení drží svá místa u bomby; k bombě jdou jen, když ji CT zneškodňuje
+      goal = S.defusing ? { x: S.bomb.x + u.off.x * 0.5, y: S.bomb.y + u.off.y * 0.5 } : u.spot;
+    } else if (p.hp > 0) {
+      goal = { x: p.x + u.off.x, y: p.y + u.off.y };
+      if (inside(p) !== inside(goal) || circleHits(goal.x, goal.y, 12)) goal = { x: p.x, y: p.y };
+    } else goal = SITE;
+    var t = u.target;
+    if (t && t.hp > 0) aimAndShoot(u, t, dt, 10);
+    if (dist(u, goal) > 26) {
+      if (!t) u.angle += angDiff(Math.atan2(goal.y - u.y, goal.x - u.x), u.angle) * Math.min(1, dt * 8);
+      steer(u, goal, dt, t && !S.defusing ? 0.7 : 1);
+    }
+  }
+
+  // ── Umělá inteligence: CT ──────────────────────────────
+  function aiCT(u, dt) {
+    if (u.rappel > 0) { u.rappel -= dt; return; }
+    u.think -= dt;
+    if (u.think <= 0) {
+      u.think = 0.25;
+      u.target = nearestVisible(u, u.sniper ? 1000 : 520);
+      if (u.target) { S.lastSeen = { x: u.target.x, y: u.target.y }; if (!S.alarm) raiseAlarm(); }
+    }
+    var t = u.target;
+    if (t && (t.hp <= 0 || t.rappel)) t = u.target = null;
+
+    // sniper: stojí, zamíří laserem (1,3 s), pak vystřelí — schovej se!
+    if (u.sniper) {
+      u.cool -= dt;
+      if (t && u.cool <= 0) {
+        u.angle = Math.atan2(t.y - u.y, t.x - u.x);
+        u.laser += dt;
+        if (u.laser >= 1.3) { u.laser = 0; u.cool = rnd(1.2, 1.8); fire(u, u.angle); }
+      } else u.laser = Math.max(0, u.laser - dt * 2);
+      return;
+    }
+
+    // breacher: dojít ke zdi, položit nálož, odpálit díru, pak na bombu
+    if (u.breacher && u.breachSpot) {
+      var bs = u.breachSpot;
+      if (t && dist(u, t) < 260) aimAndShoot(u, t, dt, 8);
+      if (dist(u, bs.out) > 16) { steer(u, bs.out, dt); return; }
+      if (!bs.charge && !bs.done) {
+        bs.charge = { x: bs.x, y: bs.y, t: 3, spot: bs };
+        S.charges.push(bs.charge);
+        banner('Breach charge — ' + bs.name);
+      }
+      if (bs.done) u.breachSpot = null;
+      return;
+    }
+
+    var goal = null;
+    if (S.bomb) goal = S.bomb;
+    else if (t) {
+      var d = dist(u, t), keep = u.gun === 'smg' ? 110 : u.shield ? 60 : 260;
+      goal = d > keep ? t : null;
+    } else if (S.alarm && S.lastSeen && (!u.holdInside || inside(S.lastSeen))) goal = S.lastSeen;
+    else if (dist(u, u.post) > 20) goal = u.post;
+
+    if (t) {
+      aimAndShoot(u, t, dt, u.shield ? 5 : 9);
+      if (u.gren) {
+        u.grenCool -= dt;
+        var dd = dist(u, t);
+        if (u.grenCool <= 0 && dd < 420 && dd > 90) {
+          u.grenCool = rnd(6, 9);
+          S.nades.push({ sx: u.x, sy: u.y, tx: t.x + rnd(-20, 20), ty: t.y + rnd(-20, 20), t: 0, dur: 0.8 });
+        }
+      }
+    } else if (goal) {
+      u.angle += angDiff(Math.atan2(goal.y - u.y, goal.x - u.x), u.angle) * Math.min(1, dt * 6);
+    }
+    if (goal) {
+      if (S.bomb && dist(u, S.bomb) < 30) return; // zneškodňuje
+      steer(u, goal, dt, t ? 0.65 : 1);
+    }
+  }
+
+  function raiseAlarm() {
+    if (S.alarm) return;
+    S.alarm = true;
+    // venkovní stráže vyrazí, vnitřní drží budovu
+    S.units.forEach(function(u) { if (u.team === 'CT' && inside(u)) u.holdInside = true; });
+    schedule(14, function() { if (!S.bomb) spawnBreachTeam(); });
+  }
+
+  // ── Speciální jednotky ─────────────────────────────────
+  function spawnRappel(n) {
+    banner('SWAT rappelling onto the roof');
+    var heli = { x: W + 120, y: rnd(320, 580), vx: -260, dropped: false, n: n };
+    S.helis.push(heli);
+  }
+  function spawnBreachTeam() {
+    var free = BREACH_SPOTS.filter(function(b) { return !b.used; });
+    if (!free.length) return;
+    var bs = pick(free);
+    bs.used = true;
+    var sp = SPAWNS.reduce(function(a, b) { return dist(a, bs.out) < dist(b, bs.out) ? a : b; });
+    for (var i = 0; i < 2; i++) S.units.push(makeCT('breacher', sp.x + rnd(-25, 25), sp.y + rnd(-15, 15), { breachSpot: bs, wave: true }));
+  }
+  function doBreach(bs) {
+    bs.done = true;
+    var gap = 44;
+    var nw = [];
+    walls.forEach(function(w) {
+      var hit = bs.vertical
+        ? (bs.x >= w[0] && bs.x <= w[0] + w[2] && bs.y - gap >= w[1] - gap && bs.y <= w[1] + w[3] + gap && w[3] > w[2])
+        : (bs.y >= w[1] && bs.y <= w[1] + w[3] && bs.x >= w[0] && bs.x <= w[0] + w[2] && w[2] > w[3]);
+      if (!hit) { nw.push(w); return; }
+      if (bs.vertical) {
+        if (bs.y - gap > w[1]) nw.push([w[0], w[1], w[2], bs.y - gap - w[1]]);
+        if (bs.y + gap < w[1] + w[3]) nw.push([w[0], bs.y + gap, w[2], w[1] + w[3] - bs.y - gap]);
+      } else {
+        if (bs.x - gap > w[0]) nw.push([w[0], w[1], bs.x - gap - w[0], w[3]]);
+        if (bs.x + gap < w[0] + w[2]) nw.push([bs.x + gap, w[1], w[0] + w[2] - bs.x - gap, w[3]]);
+      }
+    });
+    walls = nw;
+    rebuildSolids();
+    S.units.forEach(function(u) { u.path = null; });
+    S.scorch.push({ x: bs.x, y: bs.y, r: 60 });
+    S.shake = Math.max(S.shake, 0.7);
+    sfx('breach');
+    for (var i = 0; i < 70; i++) {
+      var a = rnd(0, Math.PI * 2), sp = rnd(60, 380);
+      S.parts.push({ x: bs.x, y: bs.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rnd(0.4, 1.3), c: pick(['#ffcc66', '#ff9f1c', '#888', '#555']), s: rnd(2, 6) });
+    }
+    S.units.forEach(function(u) { if (u.team === 'T' && u.hp > 0 && dist(u, bs) < 110) hurt(u, 50); });
+  }
+
+  // ── Herní smyčka ───────────────────────────────────────
+  function loop(now) {
+    if (!S) return;
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    update(dt);
+    draw();
+    raf = requestAnimationFrame(loop);
+  }
+
+  function update(dt) {
+    S.t += dt;
+    var p = S.player;
+
+    // plánované události
+    var due = S.events.filter(function(ev) { return S.t >= ev.t; });
+    if (due.length) {
+      S.events = S.events.filter(function(ev) { return S.t < ev.t; });
+      due.forEach(function(ev) { if (!S.over) ev.fn(); });
+    }
+
+    // hráč
+    if (p.hp > 0 && !S.over) {
+      var mx = 0, my = 0;
+      if (keys['w'] || keys['arrowup']) my -= 1;
+      if (keys['s'] || keys['arrowdown']) my += 1;
+      if (keys['a'] || keys['arrowleft']) mx -= 1;
+      if (keys['d'] || keys['arrowright']) mx += 1;
+      moveUnit(p, mx, my, dt);
+      var mw = mouseWorld();
+      p.angle = Math.atan2(mw.y - p.y, mw.x - p.x);
+      p.cool -= dt;
+      var g = GUNS[p.gun];
+      if (p.reloading > 0) {
+        p.reloading -= dt;
+        if (p.reloading <= 0) { p.ammo[p.gun] = g.mag; sfx('reload'); }
+      } else if (mouse.down && p.cool <= 0) {
+        if (p.ammo[p.gun] > 0) { p.cool = g.rate; p.ammo[p.gun]--; fire(p, p.angle); if (p.gun !== 'rifle') mouse.down = false; }
+        else startReload(p);
+      }
+      if (!p.reloading && p.ammo[p.gun] === 0) startReload(p);
+
+      if (!S.entered && inside(p)) {
+        S.entered = true;
+        raiseAlarm();
+        schedule(4, function() { if (!S.bomb) spawnRappel(2); });
+      }
+
+      // pokládání bomby
+      if (!S.bomb && dist(p, SITE) < SITE.r && (keys['e'] || keys['f'])) {
+        S.plant += dt;
+        if (Math.floor(S.plant * 4) !== Math.floor((S.plant - dt) * 4)) beep(880, 0.05);
+        if (S.plant >= 3) plantBomb();
+      } else if (!S.bomb) S.plant = Math.max(0, S.plant - dt * 2);
+    }
+
+    S.units.forEach(function(u) {
+      if (u.hp <= 0 || S.over) return;
+      u.flash = Math.max(0, u.flash - dt);
+      u.slow = Math.max(0, u.slow - dt);
+      if (u.team === 'T') { // tým T se po 5 s bez zásahu pomalu léčí
+        u.calm += dt;
+        if (u.calm > 5) u.hp = Math.min(u.maxHp, u.hp + 4 * dt);
+      }
+      if (u.bot) aiBot(u, dt);
+      else if (u.team === 'CT') aiCT(u, dt);
+    });
+
+    // jednotky se nepřekrývají
+    for (var i = 0; i < S.units.length; i++) {
+      var a = S.units[i];
+      if (a.hp <= 0 || a.rappel > 0) continue;
+      for (var j = i + 1; j < S.units.length; j++) {
+        var b = S.units[j];
+        if (b.hp <= 0 || b.rappel > 0) continue;
+        var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.r + b.r;
+        if (d > 0.01 && d < m) {
+          var push = (m - d) / 2, ux = dx / d * push, uy = dy / d * push;
+          if (!circleHits(a.x - ux, a.y - uy, a.r)) { a.x -= ux; a.y -= uy; }
+          if (!circleHits(b.x + ux, b.y + uy, b.r)) { b.x += ux; b.y += uy; }
+        }
+      }
+    }
+
+    // střely
+    S.bullets = S.bullets.filter(function(bl) {
+      for (var k = 0; k < 4; k++) {
+        bl.x += bl.vx * dt / 4; bl.y += bl.vy * dt / 4;
+        if (pointBlocked(bl.x, bl.y)) { S.sparks.push({ x: bl.x, y: bl.y, t: 0.15, c: '#ffd9a0' }); return false; }
+        for (var i = 0; i < S.units.length; i++) {
+          var u = S.units[i];
+          if (u.hp <= 0 || u.rappel > 0 || u.team === bl.team) continue;
+          if ((bl.x - u.x) * (bl.x - u.x) + (bl.y - u.y) * (bl.y - u.y) < (u.r + 3) * (u.r + 3)) {
+            if (u.shield && Math.abs(angDiff(Math.atan2(-bl.vy, -bl.vx), u.angle)) < 1.1) {
+              S.sparks.push({ x: bl.x, y: bl.y, t: 0.2, c: '#9fe6ff' }); sfx('block');
+              damageShield(u, bl.dmg);
+              return false;
+            }
+            hurt(u, bl.dmg);
+            return false;
+          }
+        }
+      }
+      bl.life -= dt;
+      return bl.life > 0;
+    });
+
+    // plynové granáty CT
+    S.nades = S.nades.filter(function(n) {
+      n.t += dt;
+      if (n.t >= n.dur) { S.gas.push({ x: n.tx, y: n.ty, r: 80, life: 5 }); sfx('gas'); return false; }
+      return true;
+    });
+    S.gas = S.gas.filter(function(gs) {
+      gs.life -= dt;
+      S.units.forEach(function(u) {
+        if (u.team === 'T' && u.hp > 0 && dist(u, gs) < gs.r) { u.slow = 0.3; hurt(u, 15 * dt, true); }
+      });
+      return gs.life > 0;
+    });
+    // granáty hráče
+    S.frags = S.frags.filter(function(f) {
+      f.t += dt;
+      if (f.t < f.dur) return true;
+      var c = { x: f.tx, y: f.ty };
+      sfx('frag'); S.shake = Math.max(S.shake, 0.5);
+      for (var i = 0; i < 40; i++) {
+        var a = rnd(0, Math.PI * 2), sp = rnd(60, 300);
+        S.parts.push({ x: c.x, y: c.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rnd(0.3, 0.8), c: pick(['#ffcc66', '#ff9f1c', '#777']), s: rnd(2, 5) });
+      }
+      S.units.forEach(function(u) {
+        if (u.team !== 'CT' || u.hp <= 0 || u.rappel > 0) return;
+        var d = dist(u, c);
+        if (d < 100 && los(c, u)) { u.shield = false; hurt(u, 140 * (1 - d / 130)); }
+      });
+      return false;
+    });
+    // nálože breacherů
+    S.charges = S.charges.filter(function(ch) {
+      if (!S.units.some(function(u) { return u.hp > 0 && u.breachSpot === ch.spot; })) { ch.spot.charge = null; ch.spot.used = false; return false; }
+      ch.t -= dt;
+      if (Math.floor(ch.t * 4) !== Math.floor((ch.t + dt) * 4)) beep(1400, 0.04, 0.02);
+      if (ch.t <= 0) { doBreach(ch.spot); return false; }
+      return true;
+    });
+    // vrtulníky se SWAT
+    S.helis = S.helis.filter(function(h) {
+      h.x += h.vx * dt;
+      if (!h.dropped && h.x < B.x + B.w / 2) {
+        h.dropped = true;
+        var drops = ROOF_DROPS.slice().sort(function() { return Math.random() - 0.5; }).slice(0, h.n);
+        drops.forEach(function(d) {
+          S.units.push(makeCT(Math.random() < 0.5 ? 'rifle' : 'smg', d.x, d.y, { rappel: 1.4, wave: true, ropeX: h.x, ropeY: h.y }));
+        });
+      }
+      return h.x > -200;
+    });
+
+    // bomba, vlny, speciální jednotky, zneškodňování
+    if (S.bomb && !S.over) {
+      S.bombT -= dt;
+      var interval = S.bombT < 10 ? 0.25 : S.bombT < 25 ? 0.5 : 1;
+      if (Math.floor(S.bombT / interval) !== Math.floor((S.bombT + dt) / interval)) beep(1800, 0.05, 0.025);
+      S.waveT -= dt;
+      if (S.waveT <= 0) {
+        S.wave++;
+        S.waveT = 6.5;
+        var n = Math.min(4, 1 + Math.floor(S.wave / 2));
+        for (var w = 0; w < n; w++) {
+          var sp = pick(SPAWNS);
+          S.units.push(makeCT(randomWaveType(), sp.x + rnd(-20, 20), sp.y + rnd(-10, 10), { wave: true }));
+        }
+      }
+      S.defusing = S.units.some(function(u) { return u.team === 'CT' && u.hp > 0 && !u.rappel && dist(u, S.bomb) < 30; });
+      S.defuse = S.defusing ? S.defuse + dt : Math.max(0, S.defuse - dt);
+      if (S.defuse >= 7) endGame(false, 'Bomb defused', 'CityTrack keeps watching. The cameras never blink.');
+      else if (S.bombT <= 0) explode();
+    }
+    if (p.hp <= 0 && !S.over) endGame(false, 'You were taken down', 'CityTrack keeps watching. Try a different way in.');
+
+    if (S.phase === 'boom') {
+      S.boomT += dt;
+      if (S.boomT > 3.2 && !S.over) endGame(true, 'CityTrack is down', 'The cameras are dark. Nobody is watching tonight.');
+    }
+
+    // střecha: průhledná, když je hráč uvnitř
+    var targetA = S.hole ? 0.85 : (inside(p) ? 0.12 : 1);
+    S.roofA += (targetA - S.roofA) * Math.min(1, dt * 5);
+
+    S.bannerT = Math.max(0, S.bannerT - dt);
+    S.shake = Math.max(0, S.shake - dt * 2.5);
+    S.sparks = S.sparks.filter(function(s) { s.t -= dt; return s.t > 0; });
+    S.parts = S.parts.filter(function(q) {
+      q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.96; q.vy *= 0.96; q.life -= dt;
+      return q.life > 0;
+    });
+    hud();
+  }
+
+  function plantBomb() {
+    var p = S.player;
+    S.bomb = { x: p.x, y: p.y };
+    S.phase = 'defend';
+    beep(1320, 0.3, 0.05);
+    banner('Bomb planted — hold the site');
+    S.units.forEach(function(u) { u.holdInside = false; u.path = null; });
+    // SWAT ze střechy a breacheři během obrany
+    schedule(6, function() { spawnBreachTeam(); });
+    schedule(12, function() { spawnRappel(3); });
+    schedule(17, function() { spawnBreachTeam(); });
+    schedule(22, function() { spawnRappel(3); });
+  }
+
+  function damageShield(u, dmg) {
+    u.shieldHp -= dmg;
+    if (u.shieldHp <= 0) {
+      u.shield = false; u.speed = 95;
+      for (var j = 0; j < 12; j++) S.parts.push({ x: u.x, y: u.y, vx: rnd(-160, 160), vy: rnd(-160, 160), life: rnd(0.3, 0.6), c: '#9fe6ff', s: 3 });
+    }
+  }
+  function hurt(u, dmg, silent) {
+    if (u.hp <= 0) return;
+    u.hp -= dmg;
+    u.calm = 0;
+    if (u.team === 'T' && !S.alarm) raiseAlarm();
+    if (u.team === 'CT' && !S.alarm) raiseAlarm();
+    if (u.team === 'CT' && S.player.hp > 0) S.lastSeen = { x: S.player.x, y: S.player.y };
+    if (!silent) { sfx('hit', 0.6); S.sparks.push({ x: u.x, y: u.y, t: 0.12, c: u.team === 'T' ? '#ff9f1c' : '#2ec4ff' }); }
+    if (u.hp <= 0) {
+      u.hp = 0;
+      if (u.team === 'CT') S.kills++;
+      for (var i = 0; i < 10; i++) S.parts.push({ x: u.x, y: u.y, vx: rnd(-120, 120), vy: rnd(-120, 120), life: rnd(0.3, 0.7), c: u.team === 'T' ? '#ff9f1c' : '#2ec4ff', s: 3 });
+    }
+  }
+
+  function explode() {
+    S.phase = 'boom';
+    S.hole = { x: S.bomb.x, y: S.bomb.y, r: 135 };
+    S.shake = 1.6;
+    sfx('boom');
+    S.units.forEach(function(u) { if (u.hp > 0 && u.team === 'CT' && dist(u, S.bomb) < 320) hurt(u, 999, true); });
+    for (var i = 0; i < 220; i++) {
+      var a = rnd(0, Math.PI * 2), sp = rnd(80, 620);
+      S.parts.push({ x: S.bomb.x, y: S.bomb.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rnd(0.6, 2.2),
+        c: pick(['#fff4d6', '#ffcc66', '#ff9f1c', '#ff5a1f', '#444']), s: rnd(2, 7) });
+    }
+    S.bomb = null;
+    S.defusing = false;
+  }
+
+  function endGame(win, title, sub) {
+    if (S.over) return;
+    S.over = true;
+    mouse.down = false;
+    $('ctResTitle').textContent = title;
+    $('ctResTitle').style.color = win ? '#ff9f1c' : '#2ec4ff';
+    $('ctResSub').textContent = sub + ' · CT down: ' + S.kills;
+    setTimeout(function() { if (S) $('ctResult').classList.add('show'); }, win ? 200 : 700);
+  }
+
+  function hud() {
+    var obj, mid = '';
+    if (S.phase === 'assault') {
+      obj = inside(S.player) ? 'Reach site A — hold E to plant' : 'Break into CityTrack';
+      if (S.plant > 0) mid = 'Planting ' + Math.min(100, Math.round(S.plant / 3 * 100)) + '%<small>hold E</small>';
+    } else if (S.phase === 'defend') {
+      obj = S.defusing ? 'CT is defusing — get to the bomb!' : 'Defend the bomb — hold the line';
+      mid = Math.max(0, S.bombT).toFixed(1) + '<small>' + (S.defuse > 0 ? 'defuse ' + Math.round(S.defuse / 7 * 100) + '%' : 'until detonation') + '</small>';
+    } else obj = 'CityTrack is burning';
+    $('ctObj').textContent = obj;
+    $('ctMid').innerHTML = mid;
+    var ct = S.units.filter(function(u) { return u.team === 'CT' && u.hp > 0; }).length;
+    $('ctTeam').innerHTML = S.units.filter(function(u) { return u.team === 'T'; }).map(function(u) {
+      return '<span class="' + (u.hp > 0 ? '' : 'dead') + '">' + u.name + ' ' + Math.ceil(u.hp) + '</span>';
+    }).join('<br>') + '<br><span style="color:#2ec4ff">CT alive ' + ct + '</span>';
+    var p = S.player;
+    $('ctWeap').innerHTML = PLAYER_GUNS.map(function(gn, i) {
+      return '<span class="' + (i === p.weapon ? 'on' : '') + '">' + (i + 1) + ' ' + GUNS[gn].name + '</span>';
+    }).join('') + '<br><b>' + (p.reloading > 0 ? 'Reloading…' : p.ammo[p.gun] + ' / ' + GUNS[p.gun].mag) + '</b> &nbsp; Frag &times;' + p.frags;
+    var bn = $('ctBanner');
+    if (S.bannerT > 0) { bn.textContent = '⚠ ' + S.banner; bn.classList.add('show'); }
+    else bn.classList.remove('show');
+  }
+
+  // ── Kreslení ───────────────────────────────────────────
+  function holeClip(c) {
+    c.beginPath();
+    c.rect(-50, -50, W + 100, H + 100);
+    c.arc(S.hole.x, S.hole.y, S.hole.r, 0, Math.PI * 2);
+    c.clip('evenodd');
+  }
+
+  function draw() {
+    var c = ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = '#030507';
+    c.fillRect(0, 0, canvas.width, canvas.height);
+    var sh = S.shake * 14;
+    c.setTransform(view.s, 0, 0, view.s, view.ox + rnd(-sh, sh) * view.s, view.oy + rnd(-sh, sh) * view.s);
+
+    // ulice
+    c.fillStyle = '#0b1117'; c.fillRect(0, 0, W, H);
+    c.strokeStyle = 'rgba(46,196,255,0.06)'; c.lineWidth = 1;
+    for (var gx = 0; gx <= W; gx += 50) { c.beginPath(); c.moveTo(gx, 0); c.lineTo(gx, H); c.stroke(); }
+    for (var gy = 0; gy <= H; gy += 50) { c.beginPath(); c.moveTo(0, gy); c.lineTo(W, gy); c.stroke(); }
+    c.strokeStyle = 'rgba(232,226,217,0.12)'; c.setLineDash([24, 18]); c.lineWidth = 3;
+    c.beginPath(); c.moveTo(0, 450); c.lineTo(660, 450); c.stroke(); c.setLineDash([]);
+    c.fillStyle = 'rgba(255,159,28,0.12)'; c.fillRect(20, 380, 110, 140);
+    c.fillStyle = 'rgba(255,159,28,0.5)'; c.font = '12px "DM Mono", monospace'; c.fillText('T SPAWN', 40, 372);
+
+    // podlaha budovy
+    c.fillStyle = '#131c24'; c.fillRect(B.x, B.y, B.w, B.h);
+    c.strokeStyle = 'rgba(255,255,255,0.04)';
+    for (var tx = B.x; tx < B.x + B.w; tx += 30) { c.beginPath(); c.moveTo(tx, B.y); c.lineTo(tx, B.y + B.h); c.stroke(); }
+    for (var ty = B.y; ty < B.y + B.h; ty += 30) { c.beginPath(); c.moveTo(B.x, ty); c.lineTo(B.x + B.w, ty); c.stroke(); }
+    c.strokeStyle = 'rgba(255,159,28,0.55)'; c.lineWidth = 2; c.setLineDash([8, 6]);
+    c.beginPath(); c.arc(SITE.x, SITE.y, SITE.r, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
+    c.fillStyle = 'rgba(255,159,28,0.6)'; c.font = '28px "Bebas Neue", sans-serif'; c.textAlign = 'center';
+    c.fillText('A', SITE.x, SITE.y + 10); c.textAlign = 'left';
+
+    // spáleniny po náložích
+    S.scorch.forEach(function(s) {
+      var gr = c.createRadialGradient(s.x, s.y, 5, s.x, s.y, s.r);
+      gr.addColorStop(0, 'rgba(0,0,0,0.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = gr; c.beginPath(); c.arc(s.x, s.y, s.r, 0, Math.PI * 2); c.fill();
+    });
+
+    // úkryty
+    COVER.forEach(function(s, i) {
+      var out = i < OUTSIDE_COVER;
+      c.fillStyle = out ? '#26313b' : '#1d2b36';
+      c.fillRect(s[0], s[1], s[2], s[3]);
+      c.strokeStyle = out ? 'rgba(232,226,217,0.15)' : 'rgba(46,196,255,0.35)';
+      c.strokeRect(s[0] + 0.5, s[1] + 0.5, s[2] - 1, s[3] - 1);
+      if (!out && s[3] >= 100) {
+        for (var k = 0; k < 4; k++) {
+          c.fillStyle = ((S.t * 3 + k + i) | 0) % 3 ? '#2ec4ff' : '#0a3b4d';
+          c.fillRect(s[0] + 8, s[1] + 12 + k * 22, 4, 4);
+        }
+      }
+    });
+
+    // zdi
+    c.save();
+    if (S.hole) holeClip(c);
+    c.fillStyle = '#3a4854';
+    walls.forEach(function(s) { c.fillRect(s[0], s[1], s[2], s[3]); });
+    c.restore();
+    if (S.hole) {
+      c.strokeStyle = 'rgba(255,120,40,' + Math.max(0.15, 0.8 - S.boomT * 0.2) + ')'; c.lineWidth = 6;
+      c.beginPath(); c.arc(S.hole.x, S.hole.y, S.hole.r, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.arc(S.hole.x, S.hole.y, S.hole.r - 4, 0, Math.PI * 2); c.fill();
+    }
+    // nálože na zdi
+    S.charges.forEach(function(ch) {
+      c.fillStyle = '#222'; c.fillRect(ch.x - 8, ch.y - 8, 16, 16);
+      c.fillStyle = (S.t * 6) % 1 < 0.5 ? '#ff3b30' : '#551010'; c.fillRect(ch.x - 3, ch.y - 3, 6, 6);
+    });
+
+    // bomba
+    if (S.bomb) {
+      var blink = (S.t * (S.bombT < 10 ? 8 : 3)) % 1 < 0.5;
+      c.fillStyle = '#222'; c.fillRect(S.bomb.x - 10, S.bomb.y - 7, 20, 14);
+      c.fillStyle = blink ? '#ff3b30' : '#551010'; c.fillRect(S.bomb.x - 3, S.bomb.y - 3, 6, 6);
+      if (S.defuse > 0) {
+        c.strokeStyle = '#2ec4ff'; c.lineWidth = 3;
+        c.beginPath(); c.arc(S.bomb.x, S.bomb.y, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * S.defuse / 7); c.stroke();
+      }
+    }
+
+    // plyn
+    S.gas.forEach(function(gs) {
+      var a = Math.min(1, gs.life / 1.2) * 0.55;
+      var gr = c.createRadialGradient(gs.x, gs.y, 5, gs.x, gs.y, gs.r);
+      gr.addColorStop(0, 'rgba(170,220,120,' + a + ')');
+      gr.addColorStop(1, 'rgba(120,170,90,0)');
+      c.fillStyle = gr;
+      for (var k = 0; k < 3; k++) {
+        var o = S.t * 0.8 + k * 2.1;
+        c.beginPath(); c.arc(gs.x + Math.cos(o) * 12, gs.y + Math.sin(o) * 12, gs.r * (0.8 + k * 0.1), 0, Math.PI * 2); c.fill();
+      }
+    });
+    function arcPos(n) {
+      var k = n.t / n.dur;
+      return { x: n.sx + (n.tx - n.sx) * k, y: n.sy + (n.ty - n.sy) * k - Math.sin(k * Math.PI) * 40 };
+    }
+    S.nades.forEach(function(n) { var q = arcPos(n); c.fillStyle = '#9fd67a'; c.beginPath(); c.arc(q.x, q.y, 5, 0, Math.PI * 2); c.fill(); });
+    S.frags.forEach(function(f) { var q = arcPos(f); c.fillStyle = '#ffb347'; c.beginPath(); c.arc(q.x, q.y, 5, 0, Math.PI * 2); c.fill(); });
+
+    // laser snipera (varování)
+    S.units.forEach(function(u) {
+      if (!u.sniper || u.hp <= 0 || u.laser <= 0 || !u.target) return;
+      c.strokeStyle = 'rgba(255,40,40,' + (0.15 + u.laser / 1.3 * 0.6) + ')'; c.lineWidth = 1 + u.laser;
+      c.beginPath(); c.moveTo(u.x, u.y); c.lineTo(u.target.x, u.target.y); c.stroke();
+    });
+
+    // jednotky (ne ty, co se slaňují — ty se kreslí nad střechou)
+    S.units.forEach(function(u) { if (!(u.rappel > 0)) drawUnit(c, u); });
+
+    // střely a jiskry
+    S.bullets.forEach(function(bl) {
+      c.strokeStyle = bl.team === 'T' ? 'rgba(255,200,120,0.95)' : 'rgba(160,230,255,0.95)';
+      c.lineWidth = bl.heavy ? 3 : 2;
+      c.beginPath(); c.moveTo(bl.x, bl.y); c.lineTo(bl.x - bl.vx * (bl.heavy ? 0.02 : 0.012), bl.y - bl.vy * (bl.heavy ? 0.02 : 0.012)); c.stroke();
+    });
+    S.sparks.forEach(function(s) { c.fillStyle = s.c; c.fillRect(s.x - 2, s.y - 2, 4, 4); });
+
+    // střecha CityTrack — zprůhlední, když jsme uvnitř
+    if (S.roofA > 0.02) {
+      c.save();
+      c.globalAlpha = S.roofA;
+      if (S.hole) holeClip(c);
+      c.fillStyle = '#0e161d'; c.fillRect(B.x - 6, B.y - 6, B.w + 12, B.h + 12);
+      c.strokeStyle = 'rgba(46,196,255,0.08)'; c.lineWidth = 1;
+      for (var rx = B.x; rx < B.x + B.w; rx += 40) { c.beginPath(); c.moveTo(rx, B.y - 6); c.lineTo(rx, B.y + B.h + 6); c.stroke(); }
+      c.strokeStyle = 'rgba(46,196,255,0.5)'; c.lineWidth = 2; c.strokeRect(B.x - 6, B.y - 6, B.w + 12, B.h + 12);
+      c.fillStyle = '#1b2731';
+      [[B.x + 40, B.y + 40], [B.x + B.w - 110, B.y + 40], [B.x + 40, B.y + B.h - 100], [B.x + B.w - 110, B.y + B.h - 100]].forEach(function(q) {
+        c.fillRect(q[0], q[1], 70, 60);
+        c.strokeStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.arc(q[0] + 35, q[1] + 30, 20, 0, Math.PI * 2); c.stroke();
+      });
+      var cx = B.x + B.w / 2, cy = B.y + B.h / 2 - 40;
+      c.strokeStyle = '#2ec4ff'; c.lineWidth = 4;
+      c.beginPath(); c.ellipse(cx, cy, 60, 30, 0, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = '#2ec4ff'; c.beginPath(); c.arc(cx, cy, 14, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#0e161d'; c.beginPath(); c.arc(cx + 4, cy - 4, 5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#e8e2d9'; c.font = '64px "Bebas Neue", sans-serif'; c.textAlign = 'center';
+      c.fillText('CITYTRACK', cx, cy + 95);
+      c.fillStyle = 'rgba(232,226,217,0.4)'; c.font = '11px "DM Mono", monospace';
+      c.fillText('WE SEE EVERYTHING', cx, cy + 118); c.textAlign = 'left';
+      if ((S.t * 1.5) % 1 < 0.5) {
+        c.fillStyle = '#ff3b30';
+        [[B.x + 8, B.y + 8], [B.x + B.w - 8, B.y + 8], [B.x + 8, B.y + B.h - 8], [B.x + B.w - 8, B.y + B.h - 8]].forEach(function(q) {
+          c.beginPath(); c.arc(q[0], q[1], 4, 0, Math.PI * 2); c.fill();
+        });
+      }
+      c.restore();
+    }
+
+    // SWAT se slaňuje (lano + postava, která se „zmenšuje“ dolů)
+    S.units.forEach(function(u) {
+      if (!(u.rappel > 0) || u.hp <= 0) return;
+      var k = u.rappel / 1.4;
+      c.strokeStyle = 'rgba(232,226,217,0.6)'; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(u.x, u.y - 60 * k - 10); c.lineTo(u.x, u.y); c.stroke();
+      c.save(); c.translate(u.x, u.y); c.scale(1 + k * 0.6, 1 + k * 0.6); c.translate(-u.x, -u.y);
+      drawUnit(c, u); c.restore();
+    });
+
+    // vrtulník
+    S.helis.forEach(function(h) {
+      c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(h.x + 30, h.y + 40, 70, 26, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#1f2a33'; c.beginPath(); c.ellipse(h.x, h.y, 55, 20, 0, 0, Math.PI * 2); c.fill();
+      c.fillRect(h.x + 40, h.y - 5, 70, 10);
+      c.fillStyle = '#2ec4ff'; c.fillRect(h.x - 38, h.y - 8, 16, 16);
+      c.strokeStyle = 'rgba(232,226,217,0.5)'; c.lineWidth = 3;
+      var ra = S.t * 30;
+      c.beginPath(); c.moveTo(h.x + Math.cos(ra) * 80, h.y + Math.sin(ra) * 80); c.lineTo(h.x - Math.cos(ra) * 80, h.y - Math.sin(ra) * 80);
+      c.moveTo(h.x + Math.cos(ra + 1.57) * 80, h.y + Math.sin(ra + 1.57) * 80); c.lineTo(h.x - Math.cos(ra + 1.57) * 80, h.y - Math.sin(ra + 1.57) * 80); c.stroke();
+    });
+
+    // částice, výbuch
+    S.parts.forEach(function(q) {
+      c.globalAlpha = Math.min(1, q.life * 1.5);
+      c.fillStyle = q.c; c.fillRect(q.x - q.s / 2, q.y - q.s / 2, q.s, q.s);
+    });
+    c.globalAlpha = 1;
+    if (S.phase === 'boom' && S.boomT < 0.5) {
+      c.fillStyle = 'rgba(255,240,210,' + (0.9 - S.boomT * 1.8) + ')';
+      c.fillRect(0, 0, W, H);
+    }
+    if (S.phase === 'boom') {
+      for (var f = 0; f < 6; f++) {
+        var fa = S.t * 2 + f, fr = 30 + Math.sin(S.t * 5 + f) * 8;
+        c.fillStyle = 'rgba(255,' + (100 + f * 20) + ',30,0.25)';
+        c.beginPath(); c.arc(S.hole.x + Math.cos(fa) * 40, S.hole.y + Math.sin(fa) * 40, fr, 0, Math.PI * 2); c.fill();
+      }
+    }
+
+    // zaměřovač
+    if (!S.over) {
+      var mw = mouseWorld(), pl = S.player;
+      c.strokeStyle = pl.reloading > 0 ? '#5d6b75' : '#ff9f1c'; c.lineWidth = 1.5;
+      var gap = pl.gun === 'shotgun' ? 10 : pl.gun === 'sniper' ? 2 : 4;
+      c.beginPath(); c.arc(mw.x, mw.y, 8 + gap, 0, Math.PI * 2);
+      c.moveTo(mw.x - 14 - gap, mw.y); c.lineTo(mw.x - gap, mw.y); c.moveTo(mw.x + gap, mw.y); c.lineTo(mw.x + 14 + gap, mw.y);
+      c.moveTo(mw.x, mw.y - 14 - gap); c.lineTo(mw.x, mw.y - gap); c.moveTo(mw.x, mw.y + gap); c.lineTo(mw.x, mw.y + 14 + gap);
+      c.stroke();
+    }
+    c.strokeStyle = 'rgba(46,196,255,0.25)'; c.lineWidth = 2; c.strokeRect(0, 0, W, H);
+  }
+
+  function drawUnit(c, u) {
+    if (u.hp <= 0) {
+      c.fillStyle = u.team === 'T' ? 'rgba(255,159,28,0.25)' : 'rgba(46,196,255,0.2)';
+      c.beginPath(); c.arc(u.x, u.y, u.r, 0, Math.PI * 2); c.fill();
+      return;
+    }
+    var col = u.team === 'T' ? '#ff9f1c' : u.sniper ? '#7fb8ff' : u.breacher ? '#39a0d8' : '#2ec4ff';
+    var len = u.gun === 'sniper' || u.sniper ? 20 : u.gun === 'smg' || u.gun === 'pistol' ? 7 : u.gun === 'shotgun' ? 11 : 10;
+    c.strokeStyle = '#cfd6db'; c.lineWidth = u.gun === 'shotgun' ? 5 : 4;
+    c.beginPath(); c.moveTo(u.x, u.y); c.lineTo(u.x + Math.cos(u.angle) * (u.r + len), u.y + Math.sin(u.angle) * (u.r + len)); c.stroke();
+    if (u.flash > 0) {
+      c.fillStyle = '#fff2b0';
+      c.beginPath(); c.arc(u.x + Math.cos(u.angle) * (u.r + len + 3), u.y + Math.sin(u.angle) * (u.r + len + 3), 5, 0, Math.PI * 2); c.fill();
+    }
+    c.fillStyle = col;
+    c.beginPath(); c.arc(u.x, u.y, u.r, 0, Math.PI * 2); c.fill();
+    c.fillStyle = 'rgba(0,0,0,0.35)';
+    c.beginPath(); c.arc(u.x, u.y, u.r * 0.55, 0, Math.PI * 2); c.fill();
+    if (u.isPlayer) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(u.x, u.y, u.r + 4, 0, Math.PI * 2); c.stroke(); }
+    if (u.shield) {
+      c.strokeStyle = '#9fe6ff'; c.lineWidth = 5;
+      c.beginPath(); c.arc(u.x, u.y, u.r + 7, u.angle - 1.0, u.angle + 1.0); c.stroke();
+    }
+    if (u.gren) { c.fillStyle = '#9fd67a'; c.fillRect(u.x - 3, u.y - u.r - 9, 6, 6); }
+    if (u.breacher) { c.fillStyle = '#ff6b3d'; c.fillRect(u.x - 4, u.y - u.r - 10, 8, 7); }
+    if (u.hp < u.maxHp) {
+      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(u.x - 14, u.y + u.r + 5, 28, 4);
+      c.fillStyle = col; c.fillRect(u.x - 14, u.y + u.r + 5, 28 * u.hp / u.maxHp, 4);
+    }
+  }
+})();
+</script>
 </body>
 </html>
