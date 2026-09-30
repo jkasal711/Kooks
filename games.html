@@ -442,7 +442,6 @@ window.addEventListener('pagereveal', function(e) {
 
 <footer>
   <span>© Kooks</span>
-  <a href="./" class="to-music">Back to music →</a>
 </footer>
 
 <script>
@@ -1010,7 +1009,7 @@ window.addEventListener('pagereveal', function(e) {
     u.flash = 0.05;
     sfx(g.snd, u.isPlayer ? 1 : 0.45);
   }
-  function enemiesOf(u) { return S.units.filter(function(o) { return o.hp > 0 && !o.rappel && o.team !== u.team; }); }
+  function enemiesOf(u) { return S.units.filter(function(o) { return o.hp > 0 && !(o.rappel > 0) && o.team !== u.team; }); }
   function nearestVisible(u, range, high) {
     var best = null, bd = range;
     enemiesOf(u).forEach(function(o) {
@@ -1048,33 +1047,59 @@ window.addEventListener('pagereveal', function(e) {
   }
 
   // ── Umělá inteligence: boti T ──────────────────────────
+  // Bod mimo plynový mrak, ve kterém jednotka stojí (null = není v plynu)
+  function gasEscape(u) {
+    for (var i = 0; i < S.gas.length; i++) {
+      var g = S.gas[i];
+      if (dist(u, g) > g.r + 8) continue;
+      var base = Math.atan2(u.y - g.y, u.x - g.x);
+      for (var k = 0; k < 8; k++) {
+        var a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.6;
+        var c = { x: g.x + Math.cos(a) * (g.r + 35), y: g.y + Math.sin(a) * (g.r + 35) };
+        if (!circleHits(c.x, c.y, 14)) return c;
+      }
+    }
+    return null;
+  }
+
   function aiBot(u, dt) {
     u.think -= dt;
     if (u.think <= 0) { u.think = 0.2; u.target = nearestVisible(u, 500); }
-    var p = S.player, goal;
+    var p = S.player, goal, t = u.target;
+    if (t && (t.hp <= 0 || t.rappel > 0)) t = u.target = null;
     if (S.bomb) {
-      // po položení se schovají do úkrytu s výhledem na bombu;
-      // k bombě vyběhnou jen, když ji CT zneškodňuje
+      // po položení: úkryt s výhledem na bombu, občas změní pozici,
+      // po zásahu se přesune jinam; k bombě vyběhnou jen při zneškodňování
       u.spotT = (u.spotT || 0) - dt;
-      if (!u.spot || u.spotT <= 0 || (u.calm < 0.3 && dist(u, u.spot) < 20 && u.hp < u.maxHp * 0.5)) {
-        u.spot = coverSpot(u); u.spotT = 8;
+      u.moveCd = Math.max(0, (u.moveCd || 0) - dt);
+      var hitAtSpot = u.spot && u.calm < 0.2 && dist(u, u.spot) < 25 && u.moveCd <= 0;
+      if (!u.spot || u.spotT <= 0 || hitAtSpot) {
+        u.spot = coverSpot(u); u.spotT = rnd(4, 7); u.moveCd = 1.5;
       }
-      goal = S.defusing ? { x: S.bomb.x + u.off.x * 0.5, y: S.bomb.y + u.off.y * 0.5 } : u.spot;
+      if (S.defusing) goal = { x: S.bomb.x + u.off.x * 0.5, y: S.bomb.y + u.off.y * 0.5 };
+      else if (t && dist(u, u.spot) < 30) {
+        // v úkrytu při přestřelce úkroky do stran (peek)
+        var side = Math.sin(S.t * 2.2 + (u.off.y > 0 ? 1.5 : 0)) * 26, ang = Math.atan2(t.y - u.y, t.x - u.x) + Math.PI / 2;
+        goal = { x: u.spot.x + Math.cos(ang) * side, y: u.spot.y + Math.sin(ang) * side };
+        if (circleHits(goal.x, goal.y, 13)) goal = u.spot;
+      } else goal = u.spot;
     } else if (p.hp > 0) {
       goal = { x: p.x + u.off.x, y: p.y + u.off.y };
       if (inside(p) !== inside(goal) || circleHits(goal.x, goal.y, 12)) goal = { x: p.x, y: p.y };
     } else goal = SITE;
-    var t = u.target;
-    if (t && t.hp > 0 && !(u.blindT > 0)) aimAndShoot(u, t, dt, 10);
-    if (dist(u, goal) > 26) {
+    // z plynu utéct hned
+    var esc = gasEscape(u);
+    if (esc) goal = esc;
+    if (t && !(u.blindT > 0)) aimAndShoot(u, t, dt, 10);
+    if (dist(u, goal) > (esc ? 8 : 20)) {
       if (!t) u.angle += angDiff(Math.atan2(goal.y - u.y, goal.x - u.x), u.angle) * Math.min(1, dt * 8);
-      steer(u, goal, dt, t && !S.defusing ? 0.7 : 1);
+      steer(u, goal, dt, esc || S.defusing ? 1 : t ? 0.75 : 1);
     }
   }
 
   // ── Umělá inteligence: CT ──────────────────────────────
   function aiCT(u, dt) {
-    if (u.rappel > 0) { u.rappel -= dt; return; }
+    if (u.rappel > 0) { u.rappel = Math.max(0, u.rappel - dt); return; }
     u.think -= dt;
     if (u.think <= 0) {
       u.think = 0.25;
@@ -1082,7 +1107,7 @@ window.addEventListener('pagereveal', function(e) {
       if (u.target) { S.lastSeen = { x: u.target.x, y: u.target.y }; if (!S.alarm) raiseAlarm(); }
     }
     var t = u.target;
-    if (t && (t.hp <= 0 || t.rappel)) t = u.target = null;
+    if (t && (t.hp <= 0 || t.rappel > 0)) t = u.target = null;
 
     // sniper: stojí, zamíří laserem (1,3 s), pak vystřelí — schovej se!
     if (u.sniper) {
@@ -1120,7 +1145,7 @@ window.addEventListener('pagereveal', function(e) {
     // formace: členové čety drží pozici za velitelem (štít vpředu), dokud nejsou u cíle
     var sq = u.squad;
     if (sq) {
-      if (!sq.leader || sq.leader.hp <= 0) sq.leader = sq.members.filter(function(m) { return m.hp > 0 && !m.rappel; })[0] || null;
+      if (!sq.leader || sq.leader.hp <= 0) sq.leader = sq.members.filter(function(m) { return m.hp > 0 && !(m.rappel > 0); })[0] || null;
       var L = sq.leader;
       if (L && L !== u && dist(L, goal || L) > 170) {
         var i = sq.members.indexOf(u), slots = [[-34, -26], [-34, 26], [-66, 0], [-66, -44], [-66, 44]];
@@ -1416,12 +1441,15 @@ window.addEventListener('pagereveal', function(e) {
         }
         makeSquad(list);
       }
-      S.defusing = S.units.some(function(u) { return u.team === 'CT' && u.hp > 0 && !u.rappel && dist(u, S.bomb) < 30; });
+      S.defusing = S.units.some(function(u) { return u.team === 'CT' && u.hp > 0 && !(u.rappel > 0) && dist(u, S.bomb) < 30; });
       S.defuse = S.defusing ? S.defuse + dt : Math.max(0, S.defuse - dt);
       if (S.defuse >= 7) endGame(false, 'Bomb defused', 'CityTrack keeps watching. The cameras never blink.');
       else if (S.bombT <= 0) explode();
     }
-    if (p.hp <= 0 && !S.over) endGame(false, 'You were taken down', 'CityTrack keeps watching. Try a different way in.');
+    if (p.hp <= 0 && !S.over) {
+      if (!S.bomb && S.phase === 'assault') endGame(false, 'You were taken down', 'CityTrack keeps watching. Try a different way in.');
+      else if (!S.downShown) { S.downShown = true; banner('You are down — the bomb is still ticking'); }
+    }
 
     if (S.phase === 'boom') {
       S.boomT += dt;
@@ -1510,7 +1538,7 @@ window.addEventListener('pagereveal', function(e) {
       obj = inside(S.player) ? 'Reach site A — hold E to plant' : 'Break into CityTrack';
       if (S.plant > 0) mid = 'Planting ' + Math.min(100, Math.round(S.plant / 3 * 100)) + '%<small>hold E</small>';
     } else if (S.phase === 'defend') {
-      obj = S.defusing ? 'CT is defusing — get to the bomb!' : 'Defend the bomb — hold the line';
+      obj = S.player.hp <= 0 ? 'You are down — only a defuse can stop it now' : S.defusing ? 'CT is defusing — get to the bomb!' : 'Defend the bomb — hold the line';
       mid = Math.max(0, S.bombT).toFixed(1) + '<small>' + (S.defuse > 0 ? 'defuse ' + Math.round(S.defuse / 7 * 100) + '%' : 'until detonation') + '</small>';
     } else obj = 'CityTrack is burning';
     $('ctObj').textContent = obj;
