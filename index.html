@@ -769,6 +769,7 @@ window.addEventListener('pagereveal', function(e) {
     o.start(t); o.stop(t + dur + 0.02);
   }
   // 'music' = měkké arpeggio (C dur), 'games' = 8bit „power-up“
+  // vrací délku zvuku v ms, ať přepnutí stránky zvuk neusekne
   window.kooksSound = function(kind) {
     try {
       if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -776,26 +777,29 @@ window.addEventListener('pagereveal', function(e) {
       var t = ac.currentTime + 0.02;
       if (kind === 'music') {
         [523.25, 659.25, 783.99, 1046.5].forEach(function(f, i) {
-          tone('triangle', f, f, t + i * 0.11, 0.9, 0.07);
-          tone('sine', f / 2, f / 2, t + i * 0.11, 0.9, 0.03);
+          tone('triangle', f, f, t + i * 0.08, 0.45, 0.07);
+          tone('sine', f / 2, f / 2, t + i * 0.08, 0.45, 0.03);
         });
+        return 720;
       } else {
         [392, 523.25, 659.25, 783.99, 1046.5].forEach(function(f, i) {
           tone('square', f, f * 1.06, t + i * 0.055, 0.09, 0.035);
         });
         tone('square', 1568, 2093, t + 0.3, 0.18, 0.03);
+        return 520;
       }
     } catch (e) {}
+    return 0;
   };
 
   var URLS = { games: 'games.html', music: './' };
   // Přepnutí: zvuk hned, pak nahoru (hudba plynule, hry skokově), pak prolnutí
   window.kooksSwitchTo = function(kind, stepped) {
-    kooksSound(kind);
+    var soundEnd = Date.now() + kooksSound(kind);
     function go() {
       try { sessionStorage.setItem('kooksSwitch', '1'); } catch (e) {}
-      // krátká pauza, ať je zvuk slyšet
-      setTimeout(function() { location.href = URLS[kind]; }, 180);
+      // počkat, až zvuk dozní (jinak ho odchod ze stránky usekne)
+      setTimeout(function() { location.href = URLS[kind]; }, Math.max(0, soundEnd - Date.now()));
     }
     if (window.scrollY < 2) return go();
     if (stepped) {
