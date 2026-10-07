@@ -673,6 +673,90 @@ window.addEventListener('pagereveal', function(e) {
     o.connect(g); g.connect(a.destination); o.start(now); o.stop(now + dur + 0.02);
   }
 
+  // ── Hudba během hry (generovaná, bez souborů) ─────────
+  // akční smyčka 140 BPM: kopák, virbl, hi-hat, basa; po položení bomby přidá melodii
+  var music = null;
+  function mf(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+  function startMusic() {
+    var a = audio(); if (!a) return;
+    stopMusic(0.05);
+    var out = a.createGain();
+    out.gain.setValueAtTime(0.0001, a.currentTime);
+    out.gain.exponentialRampToValueAtTime(0.13, a.currentTime + 1.2);
+    out.connect(a.destination);
+    var SIX = 60 / 140 / 4;
+    var BASS = [40, 0, 40, 40, 0, 43, 0, 40, 38, 0, 38, 38, 0, 45, 43, 0];
+    var LEAD = [64, 0, 67, 0, 71, 0, 67, 64, 62, 0, 66, 0, 69, 0, 66, 0];
+    var m = music = { out: out, step: 0, next: a.currentTime + 0.1, intense: false };
+    function kick(t) {
+      var o = a.createOscillator(), g = a.createGain();
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+      g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.22);
+    }
+    function hit(t, f, type, dur, vol) {
+      var src = a.createBufferSource(), fl = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = noiseBuf; fl.type = type; fl.frequency.value = f;
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      src.connect(fl); fl.connect(g); g.connect(out); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.02);
+    }
+    function note(t, n, type, dur, vol, cutoff) {
+      var o = a.createOscillator(), fl = a.createBiquadFilter(), g = a.createGain();
+      o.type = type; o.frequency.value = mf(n); fl.type = 'lowpass'; fl.frequency.value = cutoff;
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(fl); fl.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
+    }
+    function sched() {
+      if (music !== m) return;
+      while (m.next < a.currentTime + 0.2) {
+        var t = m.next, i = m.step % 16, bar = Math.floor(m.step / 16), up = bar % 4 === 3 ? 3 : 0;
+        if (i % 4 === 0 || i === 10) kick(t);
+        if (i === 4 || i === 12) hit(t, 1800, 'bandpass', 0.15, 0.55);
+        if (i % 2 === 0 || m.intense) hit(t, 8000, 'highpass', 0.04, 0.2);
+        if (BASS[i]) note(t, BASS[i] + up, 'sawtooth', SIX * 1.8, 0.4, m.intense ? 1000 : 520);
+        if (m.intense && LEAD[i]) note(t, LEAD[i] + up, 'square', SIX * 1.4, 0.09, 2600);
+        m.next += SIX; m.step++;
+      }
+    }
+    m.timer = setInterval(sched, 40);
+    sched();
+  }
+  function stopMusic(fade) {
+    if (!music) return;
+    var m = music; music = null;
+    clearInterval(m.timer);
+    var t = ac.currentTime, f = fade || 0.3;
+    m.out.gain.cancelScheduledValues(t);
+    m.out.gain.setValueAtTime(Math.max(0.0001, m.out.gain.value), t);
+    m.out.gain.exponentialRampToValueAtTime(0.0001, t + f);
+    setTimeout(function() { m.out.disconnect(); }, (f + 0.2) * 1000);
+  }
+  // krátké znělky: začátek, výhra, prohra
+  function jingle(kind) {
+    var a = audio(); if (!a) return;
+    var t = a.currentTime + 0.02;
+    function n(note, at, dur, type, vol) {
+      var o = a.createOscillator(), g = a.createGain();
+      o.type = type || 'square'; o.frequency.value = mf(note);
+      g.gain.setValueAtTime(0.0001, t + at); g.gain.exponentialRampToValueAtTime(vol || 0.05, t + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      o.connect(g); g.connect(a.destination); o.start(t + at); o.stop(t + at + dur + 0.02);
+    }
+    if (kind === 'start') {
+      var o = a.createOscillator(), g = a.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(880, t + 0.6);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.04, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
+      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + 0.7);
+      n(64, 0.65, 0.12); n(71, 0.8, 0.12); n(76, 0.95, 0.4, 'square', 0.06); n(52, 0.95, 0.4, 'sawtooth', 0.05);
+    } else if (kind === 'win') {
+      [60, 64, 67, 72, 76, 79, 84].forEach(function(x, i) { n(x, i * 0.09, 0.5, i % 2 ? 'triangle' : 'square', 0.05); });
+      n(48, 0.63, 1.2, 'sawtooth', 0.05); n(72, 0.63, 1.2, 'triangle', 0.06);
+    } else {
+      [64, 63, 62, 61].forEach(function(x, i) { n(x, i * 0.28, 0.45, 'sawtooth', 0.045); });
+      n(40, 1.12, 1.2, 'sawtooth', 0.06);
+    }
+  }
+
   // ── Mapa ───────────────────────────────────────────────
   var W = 1400, H = 900;
   var B = { x: 700, y: 180, w: 600, h: 540 };           // budova CityTrack
@@ -907,8 +991,13 @@ window.addEventListener('pagereveal', function(e) {
     cancelAnimationFrame(raf);
     last = performance.now();
     raf = requestAnimationFrame(loop);
+    // znělka na začátek, pak akční hudba
+    stopMusic(0.1);
+    jingle('start');
+    var thisGame = S;
+    setTimeout(function() { if (S === thisGame && !S.over) startMusic(); }, 1100);
   }
-  function stopGame() { cancelAnimationFrame(raf); raf = 0; S = null; keys = {}; mouse.down = false; }
+  function stopGame() { stopMusic(0.2); cancelAnimationFrame(raf); raf = 0; S = null; keys = {}; mouse.down = false; }
   window.__citytrack = function() { return S; }; // pro ladění
 
   function banner(text) { S.banner = text; S.bannerT = 2.8; beep(660, 0.12, 0.03); }
@@ -1476,6 +1565,7 @@ window.addEventListener('pagereveal', function(e) {
     S.bomb = { x: p.x, y: p.y };
     S.phase = 'defend';
     beep(1320, 0.3, 0.05);
+    if (music) music.intense = true; // hudba přidá melodii a ostřejší basu
     banner('Bomb planted — hold the site');
     S.units.forEach(function(u) { u.holdInside = false; u.path = null; });
     // SWAT ze střechy a breacheři během obrany
@@ -1526,6 +1616,8 @@ window.addEventListener('pagereveal', function(e) {
     if (S.over) return;
     S.over = true;
     mouse.down = false;
+    stopMusic(0.8);
+    setTimeout(function() { jingle(win ? 'win' : 'lose'); }, win ? 100 : 300);
     $('ctResTitle').textContent = title;
     $('ctResTitle').style.color = win ? '#ff9f1c' : '#2ec4ff';
     $('ctResSub').textContent = sub + ' · CT down: ' + S.kills;
