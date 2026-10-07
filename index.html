@@ -1069,6 +1069,14 @@ window.addEventListener('pagereveal', function(e) {
     setTimeout(hide, 450);
   }
 
+  // strana Music ukazuje vždy nejnovější album = první karta v sekci Releases
+  document.addEventListener('DOMContentLoaded', function() {
+    var latest = document.querySelector('#releases .release-card-img');
+    var bg = chooser.querySelector('.ch-side.music .ch-bg');
+    if (latest && bg) bg.style.backgroundImage =
+      'linear-gradient(to top, rgba(8,8,8,0.95) 5%, rgba(192,57,43,0.35) 60%, rgba(8,8,8,0.6)), url("' + latest.getAttribute('src') + '")';
+  });
+
   if (skip) {
     chooser.style.transition = 'none';
     hide();
@@ -3051,8 +3059,12 @@ function backToDiscography() {
 
 <script>
 (function() {
+  // Ukázky alb při najetí myší.
+  // Každé album má vlastní přehrávač, takže si pamatuje, kde skončilo.
+  // Poprvé začne na náhodné ukázce (začátek 16s úseku) a pak hraje plynule dál
+  // všechny ukázky alba po sobě dokola — bez skoků a opakování, dokud se stránka neobnoví.
   var SEG_DUR = 16.0;
-  var XFADE   = 16/24;
+  var FADE    = 0.6;
   var MAX_VOL = 0.4;
 
   var PREVIEWS = {
@@ -3064,66 +3076,61 @@ function backToDiscography() {
     wgs: { src: 'Album_5_full_preview.mp3', total: 416.0, label: 'We Gon\' See' }
   };
 
-  var elA = new Audio(), elB = new Audio();
-  elA.preload = elB.preload = 'none';
-  var active = elA, inactive = elB;
-  var currentKey = null;
-
-  var playing = false, hoverTimer = null, segTimer = null;
+  var players = {}, current = null, hoverTimer = null;
   var ind = document.getElementById('previewIndicator');
 
-  function fade(el, from, to, dur, cb) {
-    var steps = 20, s = 0, iv = dur * 1000 / steps;
-    el.volume = Math.max(0, Math.min(1, from));
-    var t = setInterval(function() {
+  function fadeTo(el, to, dur, cb) {
+    clearInterval(el._fade);
+    var from = el.volume, steps = 20, s = 0;
+    el._fade = setInterval(function() {
       s++;
       el.volume = Math.max(0, Math.min(1, from + (to - from) * s / steps));
-      if (s >= steps) { clearInterval(t); if (cb) cb(); }
-    }, iv);
+      if (s >= steps) { clearInterval(el._fade); el._fade = null; if (cb) cb(); }
+    }, dur * 1000 / steps);
   }
 
-  function randomStart() {
-    var total = currentKey ? PREVIEWS[currentKey].total : 464.0;
-    return Math.random() * (total - SEG_DUR - 1);
-  }
-
-  function playSeg(startTime, doFadeIn) {
-    active.currentTime = startTime;
-    active.volume = doFadeIn ? 0 : MAX_VOL;
-    active.play().catch(function(){});
-    if (doFadeIn) fade(active, 0, MAX_VOL, XFADE);
-
-    // Schedule crossfade to next segment
-    segTimer = setTimeout(function() {
-      if (!playing) return;
-      var nextStart = randomStart();
-      var tmp = inactive; inactive = active; active = tmp;
-      active.currentTime = nextStart;
-      active.volume = 0;
-      active.play().catch(function(){});
-      fade(inactive, MAX_VOL, 0, XFADE, function() { inactive.pause(); });
-      fade(active, 0, MAX_VOL, XFADE);
-      // Schedule the next crossfade
-      playSeg(nextStart, false);
-    }, (SEG_DUR - XFADE) * 1000);
+  function player(key) {
+    if (players[key]) return players[key];
+    var p = PREVIEWS[key], el = new Audio();
+    el.preload = 'none';
+    el.loop = true;          // po konci alba pokračuje od první ukázky
+    el.src = p.src;
+    el.volume = 0;
+    var segs = Math.max(1, Math.round(p.total / SEG_DUR));
+    el._startAt = Math.floor(Math.random() * segs) * SEG_DUR;
+    players[key] = el;
+    return el;
   }
 
   function start(key) {
-    if (playing) return;
     var p = PREVIEWS[key];
     if (!p) return;
-    currentKey = key;
-    playing = true;
-    elA.src = p.src; elB.src = p.src;
-    playSeg(randomStart(), true);
+    if (current && current !== key) stop();
+    current = key;
+    var el = player(key);
+    function go() {
+      if (current !== key) return;
+      el.play().catch(function() {});
+      fadeTo(el, MAX_VOL, FADE);
+    }
+    if (!el._seeked) {
+      // první přehrání: nejdřív skočit na náhodnou ukázku, pak hrát
+      el._seeked = true;
+      if (el.readyState >= 1) { el.currentTime = el._startAt; go(); }
+      else {
+        el.addEventListener('loadedmetadata', function() { el.currentTime = el._startAt; go(); }, { once: true });
+        el.preload = 'metadata';
+        el.load();
+      }
+    } else go();
     if (ind) { ind.textContent = '▶ ' + p.label; ind.classList.add('visible'); }
   }
 
   function stop() {
-    playing = false;
-    clearTimeout(segTimer);
-    fade(elA, elA.volume, 0, XFADE, function() { elA.pause(); });
-    fade(elB, elB.volume, 0, XFADE, function() { elB.pause(); });
+    if (!current) return;
+    var el = players[current];
+    current = null;
+    if (el) fadeTo(el, 0, FADE, function() { el.pause(); });  // pauza si pamatuje pozici
     if (ind) ind.classList.remove('visible');
   }
 
@@ -3136,7 +3143,7 @@ function backToDiscography() {
         // Avoid double-attaching
         if (card._previewAttached) return;
         card._previewAttached = true;
-        card.addEventListener('mouseenter', function() { hoverTimer = setTimeout(function() { start(key); }, 1500); });
+        card.addEventListener('mouseenter', function() { clearTimeout(hoverTimer); hoverTimer = setTimeout(function() { start(key); }, 1500); });
         card.addEventListener('mouseleave', function() { clearTimeout(hoverTimer); stop(); });
       });
     });
