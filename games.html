@@ -213,6 +213,58 @@
   }
   footer a:hover { color: var(--cyan); }
 
+  .footer-links { display: flex; gap: 2rem; }
+
+  /* trailer v kartě hry */
+  .game-shot video.trailer { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+  .game-shot { z-index: 1000; }   /* trailer nad scanline efektem stránky */
+  nav { z-index: 1001 !important; }
+
+  /* galerie screenshotů */
+  .gallery {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.8rem; margin-top: 0.8rem;
+  }
+  .gallery .shot {
+    padding: 0; border: 1px solid var(--border); background: var(--panel); cursor: zoom-in;
+    aspect-ratio: 16 / 9; overflow: hidden;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .gallery .shot img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(0.85); transition: transform 0.6s ease, filter 0.4s; }
+  .gallery .shot:hover { border-color: var(--cyan); box-shadow: 0 0 30px rgba(46,196,255,0.2); }
+  .gallery .shot:hover img { transform: scale(1.06); filter: none; }
+  #lightbox {
+    position: fixed; inset: 0; z-index: 9700; display: none; align-items: center; justify-content: center;
+    background: rgba(3,5,7,0.94); cursor: zoom-out; padding: 2rem;
+  }
+  #lightbox.active { display: flex; animation: fadeUp 0.3s ease both; }
+  #lightbox img { max-width: 100%; max-height: 100%; border: 1px solid var(--border); box-shadow: 0 0 80px rgba(46,196,255,0.15); }
+
+  /* okna Contact / Steam — stejná jako na hudební stránce, jen herní barvy */
+  .g-modal {
+    position: fixed; inset: 0; z-index: 9800; display: none;
+    flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    background: rgba(5,8,11,0.96); font-family: 'DM Mono', monospace; padding: 1.5rem;
+  }
+  .g-modal.active { display: flex; animation: fadeUp 0.35s ease both; }
+  .contact-eyebrow { font-size: 0.6rem; letter-spacing: 0.45em; text-transform: uppercase; color: var(--muted); margin-bottom: 1.5rem; }
+  .contact-title {
+    font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: clamp(2.5rem, 6vw, 5rem);
+    letter-spacing: 0.06em; color: var(--off-white); margin-bottom: 0.6rem;
+  }
+  .contact-email {
+    font-size: clamp(0.75rem, 2vw, 1rem); letter-spacing: 0.18em; color: var(--off-white);
+    border-bottom: 1px solid var(--muted); padding-bottom: 0.2rem; margin-bottom: 3.5rem;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .contact-email:hover { color: var(--cyan); border-color: var(--cyan); }
+  .contact-sub { font-size: 0.7rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-bottom: 3rem; }
+  .contact-close {
+    font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--muted); background: none; border: 1px solid var(--border); padding: 0.7rem 2rem; cursor: crosshair;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .contact-close:hover { color: var(--off-white); border-color: var(--off-white); }
+
   .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.8s ease, transform 0.8s ease; }
   .reveal.in { opacity: 1; transform: none; }
 
@@ -224,6 +276,7 @@
     .game-shot { min-height: 14rem; border-right: 0; border-bottom: 1px solid var(--border); }
     .game-info { padding: 1.5rem; }
     .log li { grid-template-columns: 1fr; gap: 0.3rem; }
+    .gallery { grid-template-columns: repeat(2, 1fr); }
     footer { padding: 2rem 1.25rem; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -373,7 +426,7 @@ window.addEventListener('pagereveal', function(e) {
 <nav>
   <a href="./" class="nav-logo">KOOKS</a>
   <ul class="nav-links">
-    <li><a href="#game">Game</a></li>
+    <li><a href="#game">Regentie</a></li>
     <li><a href="#devlog">Dev log</a></li>
     <li><a href="./" class="to-music nav-switch">&larr; Music</a></li>
   </ul>
@@ -405,20 +458,20 @@ window.addEventListener('pagereveal', function(e) {
   <p class="section-label">Now building</p>
   <article class="game-card reveal">
     <div class="game-shot">
-      <!-- TODO: sem dát screenshot nebo trailer hry, např. <img src="game_screenshot.png" alt=""> -->
-      <span class="placeholder">Screenshot coming soon</span>
+      <video class="trailer" src="regentie/trailer.mp4" poster="regentie/throne-eclipse.webp"
+             controls preload="none" playsinline aria-label="Regentie trailer"></video>
     </div>
     <div class="game-info">
       <span class="game-status">In development</span>
-      <h2 class="game-name">Project ???</h2>
+      <h2 class="game-name">Regentie</h2>
       <p class="game-desc">
-        <!-- TODO: popis hry -->
-        Name, story and first screenshots will be revealed soon.
+        <!-- TODO: doplnit vlastní popis hry -->
+        Who rules the board? A strange journey through surreal rooms —
+        from the throne under the eclipse to the hole, the castle and the falls.
       </p>
       <div class="tags">
-        <!-- TODO: žánr / platforma / engine -->
-        <span>Genre TBA</span>
-        <span>PC</span>
+        <span>3D</span>
+        <span>PC &middot; Steam</span>
         <span>Original soundtrack</span>
       </div>
       <div class="progress">
@@ -427,12 +480,27 @@ window.addEventListener('pagereveal', function(e) {
       </div>
     </div>
   </article>
+
+  <div class="gallery reveal" id="gallery">
+    <button class="shot" data-full="regentie/throne-eclipse.webp"><img src="regentie/throne-eclipse.webp" alt="Regentie — throne under the eclipse" loading="lazy"></button>
+    <button class="shot" data-full="regentie/control-room.png"><img src="regentie/control-room.png" alt="Regentie — control room" loading="lazy"></button>
+    <button class="shot" data-full="regentie/mole.webp"><img src="regentie/mole.webp" alt="Regentie — the mole in the pawn shop" loading="lazy"></button>
+    <button class="shot" data-full="regentie/throne-sunset.webp"><img src="regentie/throne-sunset.webp" alt="Regentie — throne at sunset" loading="lazy"></button>
+    <button class="shot" data-full="regentie/the-hole.png"><img src="regentie/the-hole.png" alt="Regentie — the hole" loading="lazy"></button>
+  </div>
 </section>
+
+<!-- zvětšený screenshot -->
+<div id="lightbox" role="dialog" aria-label="Screenshot"><img alt=""></div>
 
 <section id="devlog">
   <p class="section-label">Dev log</p>
   <ul class="log reveal">
     <!-- TODO: přidávej novinky z vývoje, nejnovější nahoru -->
+    <li>
+      <time>2026-10</time>
+      <p><b>Regentie revealed</b>First trailer and screenshots of the game are out.</p>
+    </li>
     <li>
       <time>2026-09</time>
       <p><b>Games section launched</b>Kooks now has a home for games next to the music.</p>
@@ -442,10 +510,52 @@ window.addEventListener('pagereveal', function(e) {
 
 <footer>
   <span>© Kooks</span>
+  <div class="footer-links">
+    <a href="#" onclick="openModal('contactModal'); return false;">Contact</a>
+    <!-- TODO: až bude Steam stránka, dát sem odkaz místo okna „Coming soon“ -->
+    <a href="#" onclick="openModal('steamModal'); return false;">Steam</a>
+  </div>
 </footer>
+
+<!-- CONTACT (stejně jako u hudby) -->
+<div id="contactModal" class="g-modal">
+  <p class="contact-eyebrow">Get in touch</p>
+  <h2 class="contact-title">Contact</h2>
+  <a class="contact-email" href="mailto:jkasal711@gmail.com">jkasal711@gmail.com</a>
+  <button class="contact-close" onclick="closeModal('contactModal')">&#8592; Back to site</button>
+</div>
+
+<!-- STEAM -->
+<div id="steamModal" class="g-modal">
+  <p class="contact-eyebrow">Regentie</p>
+  <h2 class="contact-title">Steam</h2>
+  <p class="contact-sub">Store page coming soon</p>
+  <button class="contact-close" onclick="closeModal('steamModal')">&#8592; Back to site</button>
+</div>
 
 <script>
 (function() {
+  // okna Contact / Steam (zavírá i Esc nebo klik mimo)
+  window.openModal = function(id) { document.getElementById(id).classList.add('active'); };
+  window.closeModal = function(id) { document.getElementById(id).classList.remove('active'); };
+  document.querySelectorAll('.g-modal').forEach(function(m) {
+    m.addEventListener('click', function(e) { if (e.target === m) m.classList.remove('active'); });
+  });
+  // galerie: klik na screenshot ho zvětší
+  var lb = document.getElementById('lightbox'), lbImg = lb.querySelector('img');
+  document.querySelectorAll('.gallery .shot').forEach(function(b) {
+    b.addEventListener('click', function() {
+      lbImg.src = b.getAttribute('data-full'); lbImg.alt = b.querySelector('img').alt;
+      lb.classList.add('active');
+    });
+  });
+  lb.addEventListener('click', function() { lb.classList.remove('active'); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    lb.classList.remove('active');
+    document.querySelectorAll('.g-modal.active').forEach(function(m) { m.classList.remove('active'); });
+  });
+
   // „← Music“ jde rovnou na hudbu bez výběru; logo KOOKS vede na výběr
   document.querySelectorAll('.to-music').forEach(function(a) {
     a.addEventListener('click', function(e) {
