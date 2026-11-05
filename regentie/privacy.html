@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>REGENTIE — Privacy Policy</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232ec4ff'/%3E%3Cpath d='M9 7h4v7.5L19.5 7h5l-7.2 8 7.7 10h-5l-5.4-7.3-1.6 1.8V25H9z' fill='%2305080b'/%3E%3C/svg%3E"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
+<script>
+// stejné nastavení přechodů jako hlavní stránky, jen bez animace
+window.addEventListener('pagereveal', function(e) {
+  var vt = e.viewTransition; if (!vt) return;
+  vt.ready.catch(function() {}); vt.finished.catch(function() {});
+  vt.skipTransition();
+});
+</script>
+<style>
+  @view-transition { navigation: auto; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --black: #05080b; --panel: #0a141c; --off-white: #e8e2d9; --cyan: #2ec4ff;
+    --muted: #7d8a94; --border: rgba(46,196,255,0.18);
+  }
+  body {
+    background: var(--black); color: var(--off-white);
+    font-family: 'DM Mono', monospace; line-height: 1.8;
+  }
+  a { color: var(--cyan); }
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: 1.2rem 3rem; border-bottom: 1px solid var(--border);
+    background: rgba(5,8,11,0.92); backdrop-filter: blur(12px);
+  }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.25em; color: var(--off-white); text-decoration: none; }
+  .langs { display: flex; gap: 0.5rem; }
+  .langs button {
+    font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
+    background: none; color: var(--muted); border: 1px solid var(--border); padding: 0.4rem 0.9rem; cursor: pointer;
+  }
+  .langs button.on { color: var(--cyan); border-color: var(--cyan); }
+  main { max-width: 46rem; margin: 0 auto; padding: 4rem 1.5rem 5rem; }
+  .eyebrow { font-size: 0.6rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--cyan); margin-bottom: 0.8rem; }
+  h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: clamp(3rem, 9vw, 5rem); line-height: 0.95; letter-spacing: 0.04em; margin-bottom: 1rem; }
+  .date { font-size: 0.7rem; color: var(--muted); margin-bottom: 2.5rem; }
+  h2 {
+    font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 1.7rem; letter-spacing: 0.08em;
+    color: var(--cyan); margin: 2.8rem 0 0.8rem; padding-top: 1.2rem; border-top: 1px solid var(--border);
+  }
+  h3 { font-size: 0.8rem; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; margin: 1.6rem 0 0.4rem; }
+  p, li { font-size: 0.8rem; color: #c9cfd3; }
+  p { margin-bottom: 0.8rem; }
+  ul { padding-left: 1.2rem; margin-bottom: 0.8rem; }
+  li { margin-bottom: 0.4rem; }
+  li::marker { color: var(--cyan); }
+  b { color: var(--off-white); font-weight: 400; }
+  code { font-family: 'DM Mono', monospace; color: var(--off-white); background: var(--panel); padding: 0.1rem 0.35rem; }
+  .contact { border: 1px solid var(--border); background: var(--panel); padding: 1rem 1.2rem; margin: 1.5rem 0; }
+  [data-lang] { display: none; }
+  [data-lang].on { display: block; }
+  footer { border-top: 1px solid var(--border); padding: 2rem 3rem; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--cyan); }
+  @media (max-width: 700px) { nav, footer { padding-left: 1.25rem; padding-right: 1.25rem; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="../games.html">REGENTIE</a>
+  <div class="langs">
+    <button type="button" data-set="en">English</button>
+    <button type="button" data-set="cs">Čeština</button>
+  </div>
+</nav>
+
+<main>
+  <!-- ═══════════ ENGLISH ═══════════ -->
+  <article data-lang="en" lang="en">
+    <p class="eyebrow">Regentie</p>
+    <h1>Privacy Policy</h1>
+    <p class="date">Last updated: 5 November 2026</p>
+
+    <p>REGENTIE is made by one independent developer (“I”, “me”). This policy explains what the game sends off your computer, why, and what you can do about it. I keep it short because the game collects very little.</p>
+    <p class="contact"><b>Contact:</b> <a href="mailto:jkasal711@gmail.com">jkasal711@gmail.com</a> · Discord: <a href="https://discord.gg/63N298nJxm" target="_blank" rel="noopener">discord.gg/63N298nJxm</a></p>
+
+    <h2>What stays on your computer</h2>
+    <p>Your progress, settings, wardrobe, rooms and the game's log (<code>launch_log.txt</code>) are saved only on your PC, in the game's folder under your user profile. I never see them unless you send a bug report with the log attached (see below).</p>
+
+    <h2>What the game sends, and why</h2>
+    <h3>1. Leaderboard <span style="color:var(--muted)">(when you are signed in to Steam)</span></h3>
+    <ul>
+      <li>Sent: your Steam ID, your in-game name, your stars and wins, and a one-time Steam ticket that proves the score is yours.</li>
+      <li>Why: to show the global leaderboard. Your in-game name and score are visible to other players there.</li>
+    </ul>
+    <h3>2. Online matches</h3>
+    <ul>
+      <li>Online play runs through Steam's networking. When a match ends, the host's game sends the match result to my server: the match code, the winning team, how long it took, and the teams' names. I use this for match history and balancing.</li>
+      <li>Card statistics: your Steam ID and which cards you played, so I can see which cards are too strong or too weak.</li>
+    </ul>
+    <h3>3. Bug reports and ideas <span style="color:var(--muted)">(only when you press F8 or “Report a bug” and click SEND)</span></h3>
+    <ul>
+      <li>Always sent: what you write, your in-game name, your Steam ID and the game's version.</li>
+      <li>Only if you leave the box ticked: a picture of the screen, the game's log, and basic facts about your PC (operating system, processor model and core count, memory size, graphics card model and driver version, screen size). Your Windows user name is removed from file paths in the log before sending.</li>
+      <li>Why: to find and fix bugs. Reports go to my server and are posted to a channel on the game's Discord server that only I (and any moderators I appoint) can read.</li>
+    </ul>
+
+    <h2>What I do not do</h2>
+    <ul>
+      <li>No ads, no advertising IDs, no tracking or analytics beyond the above.</li>
+      <li>I do not sell or share your data, except with the services that carry it: <b>Valve/Steam</b> (sign-in, multiplayer, purchases; see Steam's own privacy policy), <b>Discord</b> (where bug reports are posted) and the company that hosts my server.</li>
+    </ul>
+
+    <h2>How long I keep it</h2>
+    <ul>
+      <li>Leaderboard entries: while the leaderboard exists, or until you ask me to remove yours.</li>
+      <li>Match results and card statistics: up to 24 months, then deleted or kept only as totals that no longer include Steam IDs.</li>
+      <li>Bug reports: until the problem is fixed, and no longer than 12 months.</li>
+    </ul>
+
+    <h2>Legal basis (EU/EEA and UK)</h2>
+    <ul>
+      <li>Leaderboard, match results and card statistics: my legitimate interest in running the game's online features and keeping it fair and balanced.</li>
+      <li>Bug reports: you choose to send them. The optional attachments are sent only with your consent (the tick box), which you can withdraw by unticking it.</li>
+    </ul>
+
+    <h2>Your rights</h2>
+    <p>You can ask me to show you, correct or delete the data I hold about you, or object to its use. Write to the contact above with your Steam ID. I will answer within 30 days. If you are in the EU/EEA, you can also complain to your data protection authority.</p>
+
+    <h2>Children</h2>
+    <p>The game is not aimed at children under 13. I do not knowingly collect data from them. If you think a child has sent me data, contact me and I will delete it.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the new version will be posted on the game's Steam page and in the game, with a new date at the top.</p>
+  </article>
+
+  <!-- ═══════════ ČESKY ═══════════ -->
+  <article data-lang="cs" lang="cs">
+    <p class="eyebrow">Regentie</p>
+    <h1>Zásady ochrany osobních údajů</h1>
+    <p class="date">Naposledy upraveno: 5. listopadu 2026</p>
+
+    <p>REGENTIE dělá jeden nezávislý vývojář („já“). Tyto zásady vysvětlují, co hra posílá z tvého počítače, proč, a co s tím můžeš dělat. Jsou krátké, protože hra sbírá jen málo.</p>
+    <p class="contact"><b>Kontakt:</b> <a href="mailto:jkasal711@gmail.com">jkasal711@gmail.com</a> · Discord: <a href="https://discord.gg/63N298nJxm" target="_blank" rel="noopener">discord.gg/63N298nJxm</a></p>
+
+    <h2>Co zůstává na tvém počítači</h2>
+    <p>Postup, nastavení, šatník, místnosti a log hry (<code>launch_log.txt</code>) se ukládají jen na tvém PC, ve složce hry ve tvém uživatelském profilu. Nevidím je, pokud mi nepošleš hlášení chyby s přiloženým logem (viz níže).</p>
+
+    <h2>Co hra posílá a proč</h2>
+    <h3>1. Žebříček <span style="color:var(--muted)">(když jsi přihlášený ve Steamu)</span></h3>
+    <ul>
+      <li>Posílá se: tvoje Steam ID, jméno ve hře, hvězdy a výhry a jednorázový Steam ticket, který potvrzuje, že skóre je tvoje.</li>
+      <li>Proč: kvůli globálnímu žebříčku. Tvoje jméno ve hře a skóre tam uvidí ostatní hráči.</li>
+    </ul>
+    <h3>2. Online zápasy</h3>
+    <ul>
+      <li>Online hra běží přes síť Steamu. Na konci zápasu pošle hra hostitele výsledek na můj server: kód zápasu, vítězný tým, délku zápasu a jména týmů. Používám to pro historii zápasů a vyvažování hry.</li>
+      <li>Statistiky karet: tvoje Steam ID a které karty jsi hrál, abych viděl, které jsou moc silné nebo moc slabé.</li>
+    </ul>
+    <h3>3. Hlášení chyb a nápady <span style="color:var(--muted)">(jen když stiskneš F8 nebo „Nahlásit chybu“ a klikneš na ODESLAT)</span></h3>
+    <ul>
+      <li>Odešle se vždy: co napíšeš, tvoje jméno ve hře, Steam ID a verze hry.</li>
+      <li>Jen když necháš zaškrtnuté: obrázek obrazovky, log hry a základní údaje o tvém PC (operační systém, model a počet jader procesoru, velikost paměti, model grafické karty a verze ovladače, velikost obrazovky). Před odesláním se z cest v logu odstraní tvoje uživatelské jméno ve Windows.</li>
+      <li>Proč: abych našel a opravil chyby. Hlášení jdou na můj server a objeví se v kanálu na Discordu hry, který čtu jen já (a případně moderátoři, které určím).</li>
+    </ul>
+
+    <h2>Co nedělám</h2>
+    <ul>
+      <li>Žádné reklamy, reklamní ID, sledování ani analytika kromě výše uvedeného.</li>
+      <li>Tvoje data neprodávám a nesdílím, kromě služeb, přes které jdou: <b>Valve/Steam</b> (přihlášení, multiplayer, nákupy; viz zásady Steamu), <b>Discord</b> (kam chodí hlášení chyb) a firma, která hostuje můj server.</li>
+    </ul>
+
+    <h2>Jak dlouho to uchovávám</h2>
+    <ul>
+      <li>Záznamy v žebříčku: dokud žebříček existuje, nebo dokud mě nepožádáš o smazání.</li>
+      <li>Výsledky zápasů a statistiky karet: nejvýše 24 měsíců, pak je smažu nebo nechám jen jako souhrny bez Steam ID.</li>
+      <li>Hlášení chyb: dokud není chyba opravená, nejdéle 12 měsíců.</li>
+    </ul>
+
+    <h2>Právní základ (EU/EHP a Velká Británie)</h2>
+    <ul>
+      <li>Žebříček, výsledky zápasů a statistiky karet: můj oprávněný zájem provozovat online funkce hry a udržet ji férovou a vyváženou.</li>
+      <li>Hlášení chyb: posíláš je sám. Volitelné přílohy se posílají jen s tvým souhlasem (zaškrtávací pole), který můžeš odvolat odškrtnutím.</li>
+    </ul>
+
+    <h2>Tvoje práva</h2>
+    <p>Můžeš mě požádat, abych ti ukázal, opravil nebo smazal údaje, které o tobě mám, nebo vznést námitku proti jejich použití. Napiš na kontakt výše a uveď svoje Steam ID. Odpovím do 30 dnů. V EU/EHP si můžeš stěžovat i u úřadu pro ochranu osobních údajů (v Česku ÚOOÚ).</p>
+
+    <h2>Děti</h2>
+    <p>Hra není určená dětem do 13 let. Vědomě od nich data nesbírám. Pokud si myslíš, že mi dítě poslalo data, ozvi se a smažu je.</p>
+
+    <h2>Změny</h2>
+    <p>Když se zásady změní, nová verze bude na Steam stránce hry a ve hře, s novým datem nahoře.</p>
+  </article>
+</main>
+
+<footer>
+  <span>© Kooks</span>
+  <a href="../games.html">&larr; Back to Regentie</a>
+</footer>
+
+<script>
+(function() {
+  // jazyk: ?lang=cs / ?lang=en v adrese, jinak podle prohlížeče
+  var q = new URLSearchParams(location.search).get('lang');
+  var lang = q === 'cs' || q === 'en' ? q : ((navigator.language || '').slice(0, 2) === 'cs' ? 'cs' : 'en');
+  function set(l) {
+    document.querySelectorAll('[data-lang]').forEach(function(a) { a.classList.toggle('on', a.getAttribute('data-lang') === l); });
+    document.querySelectorAll('.langs button').forEach(function(b) { b.classList.toggle('on', b.getAttribute('data-set') === l); });
+    document.documentElement.lang = l;
+  }
+  document.querySelectorAll('.langs button').forEach(function(b) {
+    b.addEventListener('click', function() { set(b.getAttribute('data-set')); });
+  });
+  set(lang);
+})();
+</script>
+</body>
+</html>

@@ -752,7 +752,12 @@ try {
 } catch (e) {}
 // Prolnutí jen při přepnutí šipkou, ostatní přechody (logo → výběr) bez animace
 window.addEventListener('pagereveal', function(e) {
-  if (e.viewTransition && !document.documentElement.classList.contains('switched')) e.viewTransition.skipTransition();
+  var vt = e.viewTransition;
+  if (vt && !document.documentElement.classList.contains('switched')) {
+    // přeskočení je záměr — nehlásit to jako chybu
+    vt.ready.catch(function() {}); vt.finished.catch(function() {});
+    vt.skipTransition();
+  }
 });
 
 (function() {
